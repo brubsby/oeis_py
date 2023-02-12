@@ -1,0 +1,29 @@
+import itertools
+import sys
+import logging
+
+from sequence import Sequence
+
+
+class ${NAME}(Sequence):
+
+    def __init__(self):
+        super().__init__(lookup_list=[], start_index=1)
+
+    def calculate(self, n):
+        k = self.load_checkpoint(default=1, n=n)
+        for k in itertools.count(start=k):
+            self.checkpoint(k, k, 100000, n=n)
+            if k == 0:
+                self.delete_checkpoint(n=n)
+                return k
+
+
+sys.modules[__name__] = ${NAME}()
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    for n, val in ${NAME}().enumerate():
+        print(f"{n} {val}")
+
+
