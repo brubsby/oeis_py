@@ -10,7 +10,7 @@ import A104350
 class A104367(Sequence):
 
     def __init__(self):
-        super().__init__(lookup_list=[], start_index=2)
+        super().__init__(lookup_list=[], start_index=2, b_file_lookup=True)
 
     def calculate(self, n):
         value = A104350(n) + 1

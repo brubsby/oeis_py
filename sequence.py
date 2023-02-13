@@ -11,22 +11,17 @@ import modules.checkpoint as checkpoint
 
 class Sequence:
 
-    def __init__(self, start_index=1, lookup_list=None, iterative_lookup=False, b_file_lookup=False):
+    def __init__(self, start_index=1, lookup_list=None, iterative_lookup=False, b_file_lookup=False, caching=True):
         self._lookup = {}
         if lookup_list:
             for n, item in enumerate(lookup_list, start=start_index):
                 if item is not None:
                     self._lookup[n] = item
         self.start_index = start_index
-        self._caching = True
+        self._caching = caching
         self._iterative_lookup = iterative_lookup
         if b_file_lookup:
             self.cache_b_file_values()
-
-    def set_caching(self, should_cache):
-        if not should_cache:
-            self._lookup = {}
-        self._caching = should_cache
 
     def lookup(self, n):
         return self._lookup.get(n)
