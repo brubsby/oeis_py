@@ -83,7 +83,7 @@ class Sequence:
             yield n, value
 
     def enumerate_with_timeout(self, start=None, timeout=5, no_lookup=False):
-        for n, value in enumerate(self.generate_with_timeout(start=start, no_lookup=no_lookup),
+        for n, value in enumerate(self.generate_with_timeout(start=start, no_lookup=no_lookup, timeout=timeout),
                                   start=self.start_index):
             yield n, value
 
@@ -101,6 +101,7 @@ class Sequence:
         return os.path.join("..", "data", "b-files", self.__class__.__name__.replace("A", letter_file) + ".txt")
 
     def generate_b_file(self, no_lookup=False, max_n=10000, comment=None, term_digit_length_limit=1000, term_cpu_time=None):
+        logging.info(f"Generating b-file for {self.__class__.__name__}")
         with open(self.get_b_filename(), "w") as bfile:
             bfile_comment_header = f"# {self.__class__.__name__}\n"
             if comment:
@@ -113,16 +114,21 @@ class Sequence:
                                         f"#" \
                                         f""
             bfile.write(bfile_comment_header)
+            logging.info(bfile_comment_header[:-1])
             enumerator = self.enumerate(no_lookup=no_lookup) if term_cpu_time is None else self.enumerate_with_timeout(timeout=term_cpu_time)
             for n, val in enumerator:
                 strval = str(val)
                 strval_len = len(strval)
                 if strval_len > term_digit_length_limit:
-                    bfile.write(f"# a({n}) is {strval_len} digits (larger than the {term_digit_length_limit} digit soft limit)\n")
+                    line = f"# a({n}) is {strval_len} digits (larger than the {term_digit_length_limit} digit soft limit)\n"
+                    bfile.write(line)
+                    logging.info(line[:-1])
                     break
                 if val == -1 and term_cpu_time:
                     break
-                bfile.write(f"{n} {strval}\n")
+                line = f"{n} {strval}\n"
+                bfile.write(line)
+                logging.info(line[:-1])
                 if n+1 > max_n:
                     break
 

@@ -111,7 +111,7 @@ def prp_test_pfgw(expr):
         ], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True,
             cwd=dirpath)
         for i, line in enumerate(proc.stdout):
-            logging.debug(line)
+            logging.debug(line[:-1])
             if "trivially prime!" in line:
                 is_trivially_prime = True
             if "3-PRP" in line:
@@ -136,6 +136,13 @@ def prp_test_pfgw(expr):
     return 0
 
 
+def generator(start=0):
+    iterator = primesieve.Iterator()
+    iterator.skipto(max(start-1, 0))
+    while True:
+        yield iterator.next_prime()
+
+
 if __name__ == "__main__":
     code = """
 import random
@@ -150,15 +157,15 @@ for i in range({}):
     {}
 """
     functions = [
-        "gmpy2.is_prime(num)",
+        "primetest.is_prime(num)",
         "primetest.trial_div_prime_test(num)",
         "primetest.prp_test_pfgw(num)",
     ]
-    for magnitude_counter in itertools.count(start=0):
-        magnitude = pow(gmpy2.mpz(2), magnitude_counter)
+    for magnitude_counter in itertools.count(start=124):
+        magnitude = 1000 * magnitude_counter
         tests = 1
         for i, function in enumerate(functions):
-            if i == 2 and magnitude < 10000:
-                break
+            # if i == 2 and magnitude < 100000:
+            #     break
             print(f"{timeit.timeit(code.format(magnitude, tests, function), number=1):.010f}, ", end="")
         print(f"magnitude: {magnitude}")

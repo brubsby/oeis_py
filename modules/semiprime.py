@@ -5,6 +5,7 @@ import time
 import gmpy2
 import primesieve
 import modules.primetest as primetest
+from modules import yafu
 from modules.factor import trial_div_until
 from modules.factordb import FactorDB
 
@@ -29,7 +30,7 @@ def is_trial_div_semi(n, divisors=__trialdivisors):
 
 
 # trial div, prime test, and primesieve test
-def is_semi(n, divisors=__trialdivisors, check_factor_db=True, num_retries=10, sleep_time=2):
+def is_semi(n, divisors=__trialdivisors, check_factor_db=True, threads=1, work=None):
     if type(n) != gmpy2.mpz:
         n = gmpy2.mpz(n)
     if n < 2:
@@ -43,13 +44,39 @@ def is_semi(n, divisors=__trialdivisors, check_factor_db=True, num_retries=10, s
         prime_result = primetest.is_prime(factors[-1], check_factor_db=check_factor_db)
         if prime_result == 0:
             if check_factor_db:
-                return factordb_is_semi(n, num_retries=num_retries, sleep_time=sleep_time)
-            return UNKNOWN_IF_SEMIPRIME  # unknown, composite number that we couldn't crack
+                factordb_is_semi_result = factordb_is_semi(n, num_retries=0)
+                if factordb_is_semi_result != UNKNOWN_IF_SEMIPRIME:
+                    return factordb_is_semi_result
+            return yafu_is_semi(n, threads=threads, work=work)
             # todo add yafu (and report to factordb) when this result inconclusive
         if prime_result == 1:
             return PROBABLE_NOT_SEMIPRIME  # probable prime, therefore probable not semiprime
         elif prime_result == 2:
             return DEFINITE_NOT_SEMIPRIME  # certain prime, therefore certain not semiprime
+
+
+def yafu_is_semi(n, threads=1, work=None):
+    factors = yafu.factor(n, stop_after_one=True, threads=threads, work=work)
+    assert len(factors) > 0, "yafu should give factors"
+    if len(factors) == 1:
+        primetest_result = primetest.is_prime(factors[0], check_factor_db=True)
+        if primetest_result == 0:
+            raise Exception(f"yafu failed to factor {n}? shouldn't happen")
+        if primetest_result == 1:
+            return PROBABLE_NOT_SEMIPRIME
+        if primetest_result == 2:
+            return DEFINITE_NOT_SEMIPRIME
+        raise Exception(f"Prime test gave weird value: {primetest_result} for {factors[0]}")
+    if len(factors) > 2:
+        return DEFINITE_NOT_SEMIPRIME
+    primetest_result = primetest.is_prime(factors[-1], check_factor_db=True)
+    if primetest_result == 0:
+        return DEFINITE_NOT_SEMIPRIME
+    if primetest_result == 1:
+        return PROBABLE_SEMIPRIME
+    if primetest_result == 2:
+        return DEFINITE_SEMIPRIME
+    raise Exception(f"Prime test gave weird value: {primetest_result} for {factors[0]}")
 
 
 def factordb_is_semi(n, num_retries=10, sleep_time=5):
