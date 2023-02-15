@@ -1,7 +1,8 @@
 import itertools
-import sys
 import logging
+import sys
 
+from modules import factor, base, prime, semiprime
 from sequence import Sequence
 
 
@@ -23,7 +24,9 @@ sys.modules[__name__] = ${NAME}()
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    for n, val in ${NAME}().enumerate():
+    seq = ${NAME}()
+    # seq.generate_b_file(term_cpu_time=30)
+    for n, val in seq.enumerate(alert_time=60, quit_on_alert=True):
         print(f"{n} {val}")
 
 

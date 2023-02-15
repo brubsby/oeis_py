@@ -6,7 +6,7 @@ import sys
 import primesieve
 from gmpy2 import gmpy2
 
-import modules.primetest as primetest
+from modules import prime
 
 from sequence import Sequence
 
@@ -32,22 +32,22 @@ class A193109(Sequence):
             self.checkpoint(k, k, 100000005, n=n)  # iterations must be congruent to 15 mod 30
             fail = False
             for x in range(1, n + 1):
-                if primetest.trial_div_prime_test(pow2s[x] + k, divisors=self.__trial_divisors) == 0:
+                if prime.trial_div_prime_test(pow2s[x] + k, divisors=self.__trial_divisors) == 0:
                     fail = True
                     break
             if fail:
                 continue
-            if primetest.trial_div_prime_test(pow2s[n + 1] + k, divisors=self.__trial_divisors) == 2:
+            if prime.trial_div_prime_test(pow2s[n + 1] + k, divisors=self.__trial_divisors) == 2:
                 continue
             # logging.debug(f"{k} passed phase 1")
             # passed all the fast tests, continue to the more strenuous ones
             for x in range(1, n + 1):
-                if not primetest.is_prime(pow2s[x] + k):
+                if not prime.is_prime(pow2s[x] + k):
                     fail = True
                     break
             if fail:
                 continue
-            if primetest.is_prime(pow2s[n + 1] + k):
+            if prime.is_prime(pow2s[n + 1] + k):
                 continue
             self.delete_checkpoint(n=n)
             return k

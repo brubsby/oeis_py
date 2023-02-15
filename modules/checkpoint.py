@@ -2,6 +2,8 @@ import logging
 import os
 import inspect
 import time
+
+import gmpy2
 from func_timeout import func_timeout, FunctionTimedOut
 
 # module for storing integers as dat files for search
@@ -30,7 +32,7 @@ def load(filename=None, default=None):
         with open(filename) as datfile:  # file containing the start points to search
             lines = datfile.readlines()
             if lines:
-                start_vals = [int(line) for line in lines]
+                start_vals = [gmpy2.mpz(line) for line in lines]
     except FileNotFoundError:
         pass
     if not start_vals:

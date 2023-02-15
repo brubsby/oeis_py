@@ -6,12 +6,16 @@ import subprocess
 import time
 import uuid
 import tempfile
+from modules import factordb
 
 import gmpy2
 
 
 def factor(expr, stop_after_one=False, threads=1, work=None):
-    logging.debug(f"Running yafu for: {expr}")
+    str_expression = str(expr)
+    text = f"{len(str_expression)} char expression: {str_expression[:10] + '...' + str_expression[-10:]}" if len(
+        str_expression) > 100 else expr
+    logging.info(f"Running yafu {'and stopping after one factor ' if stop_after_one else ' '}for: {text}")
     str_expr = f"factor({str(expr)})"
     start_time = time.time()
     this_uuid = uuid.uuid4()
@@ -34,14 +38,14 @@ def factor(expr, stop_after_one=False, threads=1, work=None):
             popen_arglist.append("-one")
         if threads != 1:
             popen_arglist.append("-threads")
-            popen_arglist.append(threads)
+            popen_arglist.append(str(threads))
         if work:
             popen_arglist.append("-work")
-            popen_arglist.append(work)
+            popen_arglist.append(str(work))
 
         proc = subprocess.Popen(popen_arglist,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE,
-                                universal_newlines=True, cwd=dirpath)
+                                universal_newlines=True, cwd=dirpath, bufsize=1)
         print(str_expr, file=proc.stdin, flush=True)
         proc.stdin.close()
         for i, line in enumerate(proc.stdout):
@@ -55,6 +59,9 @@ def factor(expr, stop_after_one=False, threads=1, work=None):
             factors = [term if len(term) == 1 else [term[0]] * int(term[1]) for term in factors]  # [[2], [3, 3, 3, 3, 3], ...]
             factors = list(itertools.chain.from_iterable(factors))
             elapsed = time.time() - start_time
+            # if elapsed > 10:  # report factors to factordb if it took more than 10 seconds in yafu
+            # always report factors if yafu was called
+            factordb.report(expr, factors[1:])
             logging.debug(f"yafu factored {expr} in {elapsed:.02f} seconds")
             return [gmpy2.mpz(factor) for factor in factors[1:]]
     finally:

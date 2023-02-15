@@ -18,10 +18,11 @@ def factorize(n, divisors=__trialdivisors, check_factor_db=True, threads=1, work
         n = gmpy2.mpz(n)
     if n < 2:
         return []
-    factors = trial_div_until(n, until=None, divisors=divisors)
-    fully_factored = prime.is_prime(factors[-1])
-    if fully_factored:
-        return factors
+    if gmpy2.num_digits(n) < 20:
+        factors = trial_div_until(n, until=None, divisors=divisors)
+        fully_factored = prime.is_prime(factors[-1])
+        if fully_factored:
+            return factors
     if check_factor_db:
         factor_db_factors = factordb_factor(n, num_retries=0, sleep_time=0)
         if factor_db_factors != -1:
@@ -57,12 +58,12 @@ def phi(n, factors=None, divisors=__trialdivisors, check_factor_db=True, threads
     return math.prod([p-1 for p, k in factor_dict.items()]) * math.prod([pow(p, k - 1) for p, k in factor_dict.items()])
 
 
-def number_of_divisors(n, factors=None, divisors=__trialdivisors, check_factor_db=True, num_retries=10, sleep_time=2):
+def number_of_divisors(n, factors=None, divisors=__trialdivisors, check_factor_db=True, threads=1, work=None):
     if type(n) != gmpy2.mpz:
         n = gmpy2.mpz(n)
     if n == 1:
         return 1
-    signature = prime_signature(n, factors=factors, divisors=divisors, check_factor_db=check_factor_db, num_retries=num_retries, sleep_time=sleep_time)
+    signature = prime_signature(n, factors=factors, divisors=divisors, check_factor_db=check_factor_db, threads=threads, work=work)
     if signature == -1:
         return -1
     return math.prod([exponent + 1 for exponent in signature])
@@ -138,9 +139,10 @@ def factordb_get_smallest_factor(n, num_retries=10, sleep_time=2, digit_limit=10
     factors = f.get_factor_list()
     if len(factors) == 1 or gmpy2.num_digits(factors[0]) > digit_limit:
         if num_retries >= 0:
-            logging.info(
-                f"Sleeping for {sleep_time} seconds after inconclusive status ({status}) on FactorDB for value: {n}")
-            time.sleep(sleep_time)
+            if sleep_time > 0:
+                logging.info(
+                    f"Sleeping for {sleep_time} seconds after inconclusive status ({status}) on FactorDB for value: {n}")
+                time.sleep(sleep_time)
             recurse_val = factordb_get_smallest_factor(n, num_retries - 1, sleep_time=sleep_time * 2, digit_limit=digit_limit)
             if recurse_val != -1:
                 return recurse_val
@@ -160,9 +162,10 @@ def factordb_get_biggest_factor(n, num_retries=10, sleep_time=2):
     if status in ["FF"]:
         return f.get_factor_list()[-1]
     if num_retries >= 0:
-        logging.info(
-            f"Sleeping for {sleep_time} seconds after inconclusive status ({status}) on FactorDB for value: {n}")
-        time.sleep(sleep_time)
+        if sleep_time > 0:
+            logging.info(
+                f"Sleeping for {sleep_time} seconds after inconclusive status ({status}) on FactorDB for value: {n}")
+            time.sleep(sleep_time)
         recurse_val = factordb_get_biggest_factor(n, num_retries - 1, sleep_time=sleep_time * 2)
         if recurse_val != -1:
             return recurse_val
@@ -171,7 +174,7 @@ def factordb_get_biggest_factor(n, num_retries=10, sleep_time=2):
 
 
 def factordb_factor(n, num_retries=10, sleep_time=2):
-    logging.debug(f"Checking factordb for prime signature of: {n}")
+    logging.debug(f"Checking factordb for prime factors of: {n}")
     f = FactorDB(n)
     f.connect()
     status = f.get_status()
@@ -180,9 +183,10 @@ def factordb_factor(n, num_retries=10, sleep_time=2):
     if status in ["FF"]:
         return f.get_factor_list()
     if num_retries >= 0:
-        logging.info(
-            f"Sleeping for {sleep_time} seconds after inconclusive status ({status}) on FactorDB for value: {n}")
-        time.sleep(sleep_time)
+        if sleep_time > 0:
+            logging.info(
+                f"Sleeping for {sleep_time} seconds after inconclusive status ({status}) on FactorDB for value: {n}")
+            time.sleep(sleep_time)
         recurse_val = factordb_factor(n, num_retries - 1, sleep_time=sleep_time * 2)
         if recurse_val != -1:
             return recurse_val
@@ -200,8 +204,9 @@ def factordb_prime_signature(n, num_retries=10, sleep_time=2):
     if status in ["FF"]:
         return [factor_tuple[1] for factor_tuple in f.get_factor_from_api()]
     if num_retries >= 0:
-        logging.info(
-            f"Sleeping for {sleep_time} seconds after inconclusive status ({status}) on FactorDB for value: {n}")
+        if sleep_time > 0:
+            logging.info(
+                f"Sleeping for {sleep_time} seconds after inconclusive status ({status}) on FactorDB for value: {n}")
         time.sleep(sleep_time)
         recurse_val = factordb_prime_signature(n, num_retries - 1, sleep_time=sleep_time * 2)
         if recurse_val != -1:

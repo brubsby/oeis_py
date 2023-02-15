@@ -18,7 +18,7 @@ __primes_set = frozenset(primesieve.primes(2, int(1e7)))
 __gmp_BPSW_LIMIT = (21 * pow(gmpy2.mpz(10), gmpy2.mpz(15)))//10
 __pfgw_factordb_digit_limit = 50000
 # don't even trial_div if it's more than 5000 digits, as we'll probably be slow
-__in_house_trialdiv_digit_limit = 5000
+__in_house_trialdiv_digit_limit = 24
 # gmpy2.is_prime is pretty fast up to
 
 
@@ -29,10 +29,11 @@ def is_prime(n, check_factor_db=False, factordb_pfgw_limit=__pfgw_factordb_digit
     # below this limit we know gmpy2 does not get fooled by prps and is pretty fast
     if n < __gmp_BPSW_LIMIT:
         return gmpy2_is_prime(n)
-    # always trial div
-    trial_prime_div_prime_test = trial_div_prime_test(n)
-    if trial_prime_div_prime_test == 0 or trial_prime_div_prime_test == 2:
-        return trial_prime_div_prime_test
+    # trial div under a certain size
+    if trial_div_limit and n < trial_div_limit:
+        trial_div_prime_test_result = trial_div_prime_test(n)
+        if trial_div_prime_test_result == 0 or trial_div_prime_test_result == 2:
+            return trial_div_prime_test_result
     # look it up on factordb first if it's above a certain size
     # if below this size, it's maybe faster to just test, and maybe a bit more polite
     if gmpy2.num_digits(n) > factordb_pfgw_limit:
@@ -72,9 +73,12 @@ def trial_div_prime_test(n, divisors=__trialdivisors):
     return -1
 
 
-def check_factordb_prime(n, tries=3, sleep_time=5):
-    logging.debug(f"Checking factordb for prime status of: {n}")
-    f = FactorDB(n)
+def check_factordb_prime(expr, tries=3, sleep_time=5):
+    str_expression = str(expr)
+    text = f"{len(str_expression)} char expression: {str_expression[:10] + '...' + str_expression[-10:]}" if len(
+        str_expression) > 100 else expr
+    logging.info(f"Checking factordb for prime status of: {text}")
+    f = FactorDB(expr)
     f.connect()
     status = f.get_status()
     if status in ["P"]:
@@ -84,7 +88,7 @@ def check_factordb_prime(n, tries=3, sleep_time=5):
     elif status == "U":
         if tries > 0:
             time.sleep(sleep_time)
-            recurse_val = check_factordb_prime(n, tries-1, sleep_time=sleep_time*2)
+            recurse_val = check_factordb_prime(expr, tries - 1, sleep_time=sleep_time * 2)
             if recurse_val in [0, 1, 2]:
                 return recurse_val
         return -1
@@ -93,12 +97,15 @@ def check_factordb_prime(n, tries=3, sleep_time=5):
 
 
 def prp_test_pfgw(expr):
+    str_expression = str(expr)
+    text = f"{len(str_expression)} char expression: {str_expression[:10] + '...' + str_expression[-10:]}" if len(
+        str_expression) > 100 else expr
+    logging.info(f"PFGW testing {text}")
     this_uuid = uuid.uuid4()
     dirpath = os.path.join("..", "data", "temp", str(this_uuid))
     filename = f"temp-{this_uuid}.dat"
     temp_filepath = os.path.join(dirpath, filename)
     try:
-        str_expression = str(expr)
         os.makedirs(dirpath, exist_ok=True)
         with open(temp_filepath, "w") as temp:
             temp.write(str_expression)
@@ -120,9 +127,6 @@ def prp_test_pfgw(expr):
                 raise Exception("PFGW had trouble evaluating the expression")
             elif "Error opening file" in line:
                 raise Exception(f"PFGW couldn't open temp file {temp_filepath}")
-            if i == 16:  # if the process makes it to 16 lines of output, log that it's happening
-                text = f"{len(str_expression)} char expression: {str_expression[:10] + '...' + str_expression[-10:]}" if len(str_expression) > 100 else expr
-                logging.info(f"PFGW testing {text}")
         proc.wait()
         os.remove(temp_filepath)
     finally:

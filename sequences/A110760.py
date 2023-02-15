@@ -13,14 +13,14 @@ class A110760(Sequence):
         super().__init__(lookup_list=[], start_index=1, b_file_lookup=True)
 
     def calculate(self, n):
-        return factor.number_of_divisors(A007942(n))
+        return factor.number_of_divisors(A007942(n), threads=16)
 
 
 sys.modules[__name__] = A110760()
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
     seq = A110760()
-    seq.generate_b_file(term_cpu_time=10)
+    # seq.generate_b_file(term_cpu_time=10)
     for n, val in seq.enumerate():
         print(f"{n} {val}")

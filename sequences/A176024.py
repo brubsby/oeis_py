@@ -2,7 +2,7 @@ import itertools
 import sys
 import logging
 
-from modules import primetest
+from modules import prime
 from sequence import Sequence
 import A000422
 
@@ -17,7 +17,7 @@ class A176024(Sequence):
         k = self.load_checkpoint(default=self(n-1)+1 if n > 1 else 1, n=n)
         for k in itertools.count(start=k):
             self.checkpoint(k, k, n=n, cooldown=1)
-            if primetest.is_prime(A000422(k)):
+            if prime.is_prime(A000422(k)):
                 self.delete_checkpoint(n=n)
                 return k
 

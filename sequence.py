@@ -38,6 +38,8 @@ class Sequence:
                 return n
 
     def __call__(self, n, no_lookup=False):
+        if n < self.start_index:
+            return None
         if not no_lookup:
             if self._lookup.get(n) is not None:
                 return self._lookup.get(n)

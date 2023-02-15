@@ -6,7 +6,7 @@ import logging
 import gmpy2
 import primesieve
 
-from modules import primetest
+from modules import prime
 from sequence import Sequence
 
 
@@ -25,7 +25,7 @@ class A139439(Sequence):
         for k in itertools.count(start=k):
             val = prim // 2 + 4
             self.checkpoint(k, k, n=n)
-            if primetest.is_prime(val):
+            if prime.is_prime(val):
                 self.delete_checkpoint(n=n)
                 return k
             p = it.next_prime()
