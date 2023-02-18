@@ -20,7 +20,7 @@ class A216666(Sequence):
         primes = [gmpy2.mpz(p) for p in primesieve.n_primes(n)]
         for k in itertools.count(start=k):
             k = gmpy2.mpz(k)
-            self.checkpoint(k, k, 100000, n=n)
+            self.checkpoint(k, k, 1000000, n=n)
             vals = []
             fail = False
             for p in primes:

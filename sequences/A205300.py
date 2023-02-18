@@ -89,6 +89,6 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     # find next term
     seq = A205300()
-    for n, val in seq.enumerate(no_lookup=False, alert_time=10, quit_on_alert=True):
+    for n, val in seq.enumerate(alert_time=10, quit_on_alert=True):
         print(f"{n+seq.start_index} {val}")
 

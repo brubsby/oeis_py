@@ -27,5 +27,5 @@ sys.modules[__name__] = A100496()
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    for n, val in A100496().enumerate( alert_time=10, quit_on_alert=True):
+    for n, val in A100496().enumerate(alert_time=10, quit_on_alert=True):
         print(f"{n} {val}")

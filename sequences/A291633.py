@@ -313,11 +313,11 @@ class A291633(Sequence):
                 return permutation
 
     # overriding generate for algorithmic performance reasons
-    def generate(self, no_lookup=True):
+    def generator(self, start):
         one_count = 0
         zero_groups = {}
         yield 1
-        for k in itertools.count(start=1):
+        for k in itertools.count(start=start):
             this_str = "{0:b}".format(k)
             one_count += this_str.count("1")
             this_zero_groups = count_zero_groups_concat_str(this_str)

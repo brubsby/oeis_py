@@ -1,6 +1,7 @@
 import itertools
 import logging
 import os
+import re
 import sys
 import time
 import notifypy
@@ -11,7 +12,7 @@ import modules.checkpoint as checkpoint
 
 class Sequence:
 
-    def __init__(self, start_index=1, lookup_list=None, iterative_lookup=False, b_file_lookup=False, caching=True):
+    def __init__(self, start_index=1, no_lookup=False, lookup_list=None, iterative_lookup=False, b_file_lookup=False, caching=True):
         self._lookup = {}
         if lookup_list:
             for n, item in enumerate(lookup_list, start=start_index):
@@ -20,6 +21,7 @@ class Sequence:
         self.start_index = start_index
         self._caching = caching
         self._iterative_lookup = iterative_lookup
+        self._no_lookup = no_lookup
         if b_file_lookup:
             self.cache_b_file_values()
 
@@ -37,10 +39,10 @@ class Sequence:
             if n not in self._lookup:
                 return n
 
-    def __call__(self, n, no_lookup=False):
+    def __call__(self, n):
         if n < self.start_index:
             return None
-        if not no_lookup:
+        if not self._no_lookup:
             if self._lookup.get(n) is not None:
                 return self._lookup.get(n)
             # sequence refers to it past 1 term mostly
@@ -61,10 +63,12 @@ class Sequence:
     def list(self, n, no_lookup=False):
         return [self(i, no_lookup) for i in range(self.start_index, n + 1)]
 
-    def generate(self, no_lookup=False, alert_time=None, quit_on_alert=False):
+    def generate(self, start=None, alert_time=None, quit_on_alert=False):
         last = time.time() - 0.01
-        for n in itertools.count(start=self.start_index):
-            value = self(n, no_lookup)
+        if not start:
+            start = self.start_index
+        generator = self.generator(start=start)
+        for value in generator:
             yield value
             checkpoint.timing_reset()
             if alert_time:
@@ -79,30 +83,39 @@ class Sequence:
                         sys.exit(0)
                 last = now
 
-    def enumerate(self, no_lookup=False, alert_time=None, quit_on_alert=False):
-        for n, value in enumerate(self.generate(no_lookup=no_lookup, alert_time=alert_time, quit_on_alert=quit_on_alert),
-                                  start=self.start_index):
-            yield n, value
+    # a sequence can override this method for more efficient generation (e.g. for prime sieves etc)
+    def generator(self, start):
+        for n in itertools.count(start=start):
+            yield self(n)
 
-    def enumerate_with_timeout(self, start=None, timeout=5, no_lookup=False):
-        for n, value in enumerate(self.generate_with_timeout(start=start, no_lookup=no_lookup, timeout=timeout),
-                                  start=self.start_index):
-            yield n, value
-
-    def generate_with_timeout(self, start=None, timeout=5, no_lookup=False):
+    def enumerate(self, alert_time=None, quit_on_alert=False, start=None):
         if start is None:
             start = self.start_index
-        term_getter = self.calculate if no_lookup else self.__call__
-        for n in itertools.count(start=start):
+        for n, value in enumerate(self.generate(alert_time=alert_time, quit_on_alert=quit_on_alert, start=start),
+                                  start=start):
+            yield n, value
+
+    def enumerate_with_timeout(self, start=None, timeout=5):
+        if start is None:
+            start = self.start_index
+        for n, value in enumerate(self.generate_with_timeout(start=start, timeout=timeout),
+                                  start=start):
+            yield n, value
+
+    def generate_with_timeout(self, start=None, timeout=5):
+        if start is None:
+            start = self.start_index
+        generator = self.generator(start)
+        while True:
             try:
-                yield func_timeout(timeout, term_getter, [n])
+                yield func_timeout(timeout, next, [generator])
             except FunctionTimedOut:
                 yield -1
 
     def get_b_filename(self, letter_file="b"):
         return os.path.join("..", "data", "b-files", self.__class__.__name__.replace("A", letter_file) + ".txt")
 
-    def generate_b_file(self, no_lookup=False, max_n=10000, comment=None, term_digit_length_limit=1000, term_cpu_time=None):
+    def generate_b_file(self, max_n=10000, comment=None, term_digit_length_limit=1000, term_cpu_time=None):
         logging.info(f"Generating b-file for {self.__class__.__name__}")
         with open(self.get_b_filename(), "w") as bfile:
             bfile_comment_header = f"# {self.__class__.__name__}\n"
@@ -117,7 +130,7 @@ class Sequence:
                                         f""
             bfile.write(bfile_comment_header)
             logging.info(bfile_comment_header[:-1])
-            enumerator = self.enumerate(no_lookup=no_lookup) if term_cpu_time is None else self.enumerate_with_timeout(timeout=term_cpu_time)
+            enumerator = self.enumerate() if term_cpu_time is None else self.enumerate_with_timeout(timeout=term_cpu_time)
             for n, val in enumerator:
                 strval = str(val)
                 strval_len = len(strval)
@@ -144,7 +157,7 @@ class Sequence:
                     continue
                 line = line.split("#")[0].strip()
                 if line:
-                    parts = line.split(" ")
+                    parts = re.split("\s+", line)
                     assert len(parts) == 2, "Too many terms in a single b file line"
                     n = int(parts[0])
                     value = int(parts[1])

@@ -16,9 +16,9 @@ __trialdivisors = primesieve.primes(2, int(1e6))
 __primes_set = frozenset(primesieve.primes(2, int(1e7)))
 # https://github.com/aleaxit/gmpy/issues/354#issuecomment-1404620217
 __gmp_BPSW_LIMIT = (21 * pow(gmpy2.mpz(10), gmpy2.mpz(15)))//10
-__pfgw_factordb_digit_limit = 50000
+__pfgw_factordb_digit_limit = 20000
 # don't even trial_div if it's more than 5000 digits, as we'll probably be slow
-__in_house_trialdiv_digit_limit = 24
+__in_house_trialdiv_digit_limit = 100
 # gmpy2.is_prime is pretty fast up to
 
 
@@ -38,7 +38,7 @@ def is_prime(n, check_factor_db=False, factordb_pfgw_limit=__pfgw_factordb_digit
     # if below this size, it's maybe faster to just test, and maybe a bit more polite
     if gmpy2.num_digits(n) > factordb_pfgw_limit:
         if check_factor_db:
-            factordb_result = check_factordb_prime(n, tries=2, sleep_time=5)
+            factordb_result = check_factordb_prime(n, retries=0, sleep_time=0)
             if factordb_result != -1:
                 return factordb_result
         return prp_test_pfgw(n)  # not checking factordb, just test
@@ -49,7 +49,7 @@ def is_prime(n, check_factor_db=False, factordb_pfgw_limit=__pfgw_factordb_digit
                 return pfgw_result
             # we were told to check factordb, at least see if factordb knows for sure
             # if we haven't been able to figure it out
-            factordb_result = check_factordb_prime(n, tries=2, sleep_time=5)
+            factordb_result = check_factordb_prime(n, retries=0, sleep_time=0)
             if factordb_result in [0, 1, 2]:
                 return factordb_result
             return pfgw_result  # return the pfgw result (1) if factordb messed up
@@ -73,7 +73,7 @@ def trial_div_prime_test(n, divisors=__trialdivisors):
     return -1
 
 
-def check_factordb_prime(expr, tries=3, sleep_time=5):
+def check_factordb_prime(expr, retries=3, sleep_time=5):
     str_expression = str(expr)
     text = f"{len(str_expression)} char expression: {str_expression[:10] + '...' + str_expression[-10:]}" if len(
         str_expression) > 100 else expr
@@ -86,9 +86,10 @@ def check_factordb_prime(expr, tries=3, sleep_time=5):
     elif status in ["PRP", "Prp"]:
         return 1
     elif status == "U":
-        if tries > 0:
-            time.sleep(sleep_time)
-            recurse_val = check_factordb_prime(expr, tries - 1, sleep_time=sleep_time * 2)
+        if retries > 0:
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+            recurse_val = check_factordb_prime(expr, retries - 1, sleep_time=sleep_time * 2)
             if recurse_val in [0, 1, 2]:
                 return recurse_val
         return -1
@@ -97,10 +98,8 @@ def check_factordb_prime(expr, tries=3, sleep_time=5):
 
 
 def prp_test_pfgw(expr):
+    start_time = time.time()
     str_expression = str(expr)
-    text = f"{len(str_expression)} char expression: {str_expression[:10] + '...' + str_expression[-10:]}" if len(
-        str_expression) > 100 else expr
-    logging.info(f"PFGW testing {text}")
     this_uuid = uuid.uuid4()
     dirpath = os.path.join("..", "data", "temp", str(this_uuid))
     filename = f"temp-{this_uuid}.dat"
@@ -117,7 +116,13 @@ def prp_test_pfgw(expr):
             "-k", filename,  # "-f0",
         ], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True,
             cwd=dirpath)
+        info_logged = False
         for i, line in enumerate(proc.stdout):
+            if not info_logged and time.time() - start_time > 1:
+                text = f"{len(str_expression)} char expression: {str_expression[:10] + '...' + str_expression[-10:]}" if len(
+                    str_expression) > 100 else expr
+                logging.info(f"PFGW testing {text}")
+                info_logged = True
             logging.debug(line[:-1])
             if "trivially prime!" in line:
                 is_trivially_prime = True

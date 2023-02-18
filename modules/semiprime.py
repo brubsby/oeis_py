@@ -29,7 +29,7 @@ def is_trial_div_semi(n, divisors=__trialdivisors):
     return UNKNOWN_IF_SEMIPRIME
 
 
-def is_semi(n, divisors=__trialdivisors, run_yafu=True, check_factor_db=True, threads=1, work=None):
+def is_semi(n, divisors=__trialdivisors, run_yafu=True, check_factor_db=True, check_factor_db_prime=False, threads=1, work=None):
     if type(n) != gmpy2.mpz:
         n = gmpy2.mpz(n)
     if n < 2:
@@ -39,17 +39,17 @@ def is_semi(n, divisors=__trialdivisors, run_yafu=True, check_factor_db=True, th
         return DEFINITE_NOT_SEMIPRIME
     if len(factors) == 2:
         # no trial div, we already did
-        return prime.is_prime(factors[-1], check_factor_db=check_factor_db, trial_div_limit=None)
+        return prime.is_prime(factors[-1], check_factor_db=check_factor_db_prime, trial_div_limit=None)
     else:  # trial div revealed no factors
         # no trial div, we already did
-        prime_result = prime.is_prime(factors[-1], check_factor_db=check_factor_db, trial_div_limit=None)
+        prime_result = prime.is_prime(factors[-1], check_factor_db=check_factor_db_prime, trial_div_limit=None)
         if prime_result == 0:  # candidate is a single composite number that trial div did not crack
             if check_factor_db:  # check factor db if caller allows it
                 factordb_is_semi_result = factordb_is_semi(n, num_retries=0)  # call only once to see if info is cached
                 if factordb_is_semi_result != UNKNOWN_IF_SEMIPRIME:
                     return factordb_is_semi_result  # return a definitive value if we get it
             if run_yafu:  # didn't get anything definitive from factordb, use yafu from here on out if caller allows it
-                return yafu_is_semi(n, threads=threads, work=work)
+                return yafu_is_semi(n, threads=threads, work=work, report_to_factordb=check_factor_db)
             if check_factor_db:  # otherwise wait forever for factordb to have an answer (again) if user allows it
                 return factordb_is_semi(n, num_retries=999999999, sleep_time=2)
             return UNKNOWN_IF_SEMIPRIME  # otherwise we have no way of knowing
@@ -59,8 +59,8 @@ def is_semi(n, divisors=__trialdivisors, run_yafu=True, check_factor_db=True, th
             return DEFINITE_NOT_SEMIPRIME  # candidate is prime, therefore not semiprime
 
 
-def yafu_is_semi(n, threads=1, work=None):
-    factors = yafu.factor(n, stop_after_one=True, threads=threads, work=work)
+def yafu_is_semi(n, threads=1, work=None, report_to_factordb=False):
+    factors = yafu.factor(n, stop_after_one=True, threads=threads, work=work, report_to_factordb=report_to_factordb)
     assert len(factors) > 0, "yafu should give factors"
     if len(factors) == 1:
         # yafu did trial div

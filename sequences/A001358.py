@@ -17,9 +17,7 @@ class A001358(Sequence):
             is_semi = semiprime.is_semi(k)
             if is_semi > 0:
                 return k
-            elif is_semi == -1:
-                print(f"yafu time: {k}")
-                exit(1)
+            assert is_semi != -1
 
 
 sys.modules[__name__] = A001358()

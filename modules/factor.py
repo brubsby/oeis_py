@@ -20,7 +20,7 @@ def factorize(n, divisors=__trialdivisors, check_factor_db=True, threads=1, work
         return []
     if gmpy2.num_digits(n) < 20:
         factors = trial_div_until(n, until=None, divisors=divisors)
-        fully_factored = prime.is_prime(factors[-1])
+        fully_factored = prime.is_prime(factors[-1], trial_div_limit=None)
         if fully_factored:
             return factors
     if check_factor_db:

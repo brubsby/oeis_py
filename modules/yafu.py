@@ -1,3 +1,4 @@
+import functools
 import itertools
 import logging
 import os
@@ -11,7 +12,7 @@ from modules import factordb
 import gmpy2
 
 
-def factor(expr, stop_after_one=False, threads=1, work=None):
+def factor(expr, stop_after_one=False, report_to_factordb=True, threads=1, work=None):
     str_expression = str(expr)
     text = f"{len(str_expression)} char expression: {str_expression[:10] + '...' + str_expression[-10:]}" if len(
         str_expression) > 100 else expr
@@ -56,14 +57,21 @@ def factor(expr, stop_after_one=False, threads=1, work=None):
             assert len(lines) == 1, "Should only be one line in factor output file per yafu invocation"
             factors = lines[0].split("/")  # [2, 3^5, ...]
             factors = [term.split("^") for term in factors]  # [[2], [3, 5], ...]
-            factors = [term if len(term) == 1 else [term[0]] * int(term[1]) for term in factors]  # [[2], [3, 3, 3, 3, 3], ...]
+            factors = [[gmpy2.mpz(term[0])] if len(term) == 1 else [gmpy2.mpz(term[0])] * int(term[1]) for term in factors[1:]]  # [[2], [3, 3, 3, 3, 3], ...]
             factors = list(itertools.chain.from_iterable(factors))
+
+            if stop_after_one:
+                # yafu doesn't give the remaining cofactor so we have to calculate it
+                # (worry about evaluating math expressions later)
+                assert type(expr) in [int, gmpy2.mpz]
+                factors.append(functools.reduce(lambda comp, div: comp // div, factors, expr))
             elapsed = time.time() - start_time
             # if elapsed > 10:  # report factors to factordb if it took more than 10 seconds in yafu
             # always report factors if yafu was called
-            factordb.report(expr, factors[1:])
+            if report_to_factordb:
+                factordb.report(expr, factors)
             logging.debug(f"yafu factored {expr} in {elapsed:.02f} seconds")
-            return [gmpy2.mpz(factor) for factor in factors[1:]]
+            return [gmpy2.mpz(factor) for factor in factors]
     finally:
         # cleanup temp dir
         shutil.rmtree(dirpath, ignore_errors=True)
