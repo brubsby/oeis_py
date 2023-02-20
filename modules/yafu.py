@@ -24,6 +24,7 @@ def factor(expr, stop_after_one=False, report_to_factordb=True, threads=1, work=
     dirpath = os.path.join("..", "data", "temp", str(this_uuid))
     filename = f"temp-{this_uuid}.dat"
     temp_filepath = os.path.join(dirpath, filename)
+    proc = None
     try:
         os.makedirs(dirpath, exist_ok=True)
         # symlink the yafu.ini so we can use it from the throwaway temp dir without polluting the yafu directory with
@@ -73,6 +74,8 @@ def factor(expr, stop_after_one=False, report_to_factordb=True, threads=1, work=
             logging.debug(f"yafu factored {expr} in {elapsed:.02f} seconds")
             return [gmpy2.mpz(factor) for factor in factors]
     finally:
+        if proc:
+            proc.kill()
         # cleanup temp dir
         shutil.rmtree(dirpath, ignore_errors=True)
 

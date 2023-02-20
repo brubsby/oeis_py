@@ -13,13 +13,7 @@ class A104358(Sequence):
         super().__init__(lookup_list=[], start_index=2, b_file_lookup=True)
 
     def calculate(self, n):
-        value = A104350(n) - 1
-        smallest_prime_factor = factor.smallest_prime_factor(value)
-        if smallest_prime_factor != -1:
-            return smallest_prime_factor
-        else:
-            print(f"yafu time: http://factordb.com/index.php?query={value}")
-            exit(1)
+        return factor.smallest_prime_factor(A104350(n) - 1)
 
 sys.modules[__name__] = A104358()
 

@@ -153,7 +153,7 @@ def factordb_get_smallest_factor(n, num_retries=10, sleep_time=2, digit_limit=10
 
 
 def factordb_get_biggest_factor(n, num_retries=10, sleep_time=2):
-    logging.debug(f"Checking factordb for smallest factor of: {n}")
+    logging.debug(f"Checking factordb for biggest factor of: {n}")
     f = FactorDB(n)
     f.connect()
     status = f.get_status()
@@ -169,7 +169,7 @@ def factordb_get_biggest_factor(n, num_retries=10, sleep_time=2):
         recurse_val = factordb_get_biggest_factor(n, num_retries - 1, sleep_time=sleep_time * 2)
         if recurse_val != -1:
             return recurse_val
-    logging.debug(f"Unable to find smallest factor for {n}")
+    logging.debug(f"Unable to find biggest factor for {n}")
     return -1
 
 

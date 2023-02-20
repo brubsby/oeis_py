@@ -11,7 +11,7 @@ from sequence import Sequence
 from sympy import primorial
 
 
-class A034386(Sequence):
+class A002110(Sequence):
 
     def __init__(self):
         super().__init__(lookup_list=[], start_index=0)
@@ -31,11 +31,11 @@ class A034386(Sequence):
 
 
 
-sys.modules[__name__] = A034386()
+sys.modules[__name__] = A002110()
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    seq = A034386()
+    seq = A002110()
     # seq.generate_b_file(term_cpu_time=30)
     for n, val in seq.enumerate(alert_time=60, quit_on_alert=True):
         if n > 100:
