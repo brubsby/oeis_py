@@ -113,7 +113,7 @@ class Sequence:
                 yield -1
 
     def get_b_filename(self, letter_file="b"):
-        return os.path.join("..", "data", "b-files", self.__class__.__name__.replace("A", letter_file) + ".txt")
+        return os.path.join(os.path.dirname(__file__), "data", "b-files", self.__class__.__name__.replace("A", letter_file) + ".txt")
 
     def generate_b_file(self, max_n=10000, comment=None, term_digit_length_limit=1000, term_cpu_time=None):
         logging.info(f"Generating b-file for {self.__class__.__name__}")

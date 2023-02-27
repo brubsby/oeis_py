@@ -36,7 +36,7 @@ if __name__ == "__main__":
         composite = composite_row['value']
         work = float(composite_row['t_level'])
         pretest_level = ((work // 5) + 1) * 5  # next multiple of 5 t-level, perhaps reduce to 1 as t-level gets higher
-        factors = yafu.factor(composite, threads=4, work=composite_row['t_level'], pretest=pretest_level)
+        factors = yafu.factor(composite, threads=8, work=composite_row['t_level'], pretest=pretest_level)
         if len(factors) > 1:
             root_logger.info("Found factors!")
         db.update_work(composite, pretest_level)

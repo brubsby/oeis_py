@@ -14,7 +14,7 @@ import gmpy2
 from modules import ecmprobs, expression, factor, prime
 
 DB_NAME = "oeis_factor.db"
-DB_PATH = os.path.join("..", "data", "db", DB_NAME)
+DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "db", DB_NAME)
 
 logger = logging.getLogger("oeis_factor_db")
 
@@ -320,6 +320,6 @@ if __name__ == "__main__":
     root_logger.addHandler(handler)
 
     db = OEISFactorDB()
-    db.process_parsed_wiki_page(db.parse_wiki_page())
+    # db.process_parsed_wiki_page(db.parse_wiki_page())
     # print(db.get_easiest_composite())
     [print(row["id"]) for row in db.get_sequences_with_no_composites()]

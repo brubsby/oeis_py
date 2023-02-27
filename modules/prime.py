@@ -163,6 +163,10 @@ def nth_primorial(n):
     return math.prod(primesieve.n_primes(n), start=gmpy2.mpz(1))
 
 
+def primorial(p):
+    return math.prod(primesieve.primes(2, p), start=gmpy2.mpz(1))
+
+
 if __name__ == "__main__":
 
     print(next(generator))

@@ -8,7 +8,7 @@ from func_timeout import func_timeout, FunctionTimedOut
 
 # module for storing integers as dat files for search
 
-__file_path = os.path.join("C:\\", "GitProjects", "oeis", "data", "dats")
+__file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "dats")
 __last = None
 __last_counter = None
 __start = None

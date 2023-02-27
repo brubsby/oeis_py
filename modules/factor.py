@@ -9,6 +9,12 @@ import primesieve
 from modules import prime
 from modules.factordb import FactorDB
 from modules import yafu
+import sequences.A000945 as A000945
+import sequences.A051328 as A051328
+import sequences.A051309 as A051309
+import sequences.A051334 as A051334
+import sequences.A051335 as A051335
+import sequences.A051308 as A051308
 
 __trialdivisors = primesieve.primes(2, int(1e6))
 
@@ -140,7 +146,7 @@ def factordb_get_smallest_factor(n, num_retries=10, sleep_time=2, digit_limit=10
     factors = f.get_factor_list()
     if not factors:
         return -1
-    if len(factors) == 1 or gmpy2.num_digits(factors[0]) > digit_limit:
+    if len(factors) == 1 or (digit_limit and gmpy2.num_digits(factors[0]) > digit_limit):
         if num_retries >= 0:
             if sleep_time > 0:
                 logging.info(
@@ -306,3 +312,51 @@ def get_all_proper_divisors(n, threads=1, work=None):
 
 def aliquot_sum(n, threads=1, work=None):
     return sum(get_all_proper_divisors(n, threads=threads, work=None))
+
+
+def euclid_mullin(start, index):
+    # reference the sequence objects where they exist for fast lookups
+    assert index > 0
+    if index == 1:
+        return gmpy2.mpz(start)
+    if start == 2:
+        return A000945(index)
+    if start == 5:
+        return A051308(index)
+    if start == 11:
+        return A051309(index)
+    if start == 89:
+        return A051328(index)
+    if start == 8191:
+        return A051334(index)
+    if start == 127:
+        return A051335(index)
+    return smallest_prime_factor(euclid_mullin_product(start, index-1) + 1)
+
+
+def euclid_mullin_product(start, index):
+    assert index > 0
+    if index == 1:
+        return gmpy2.mpz(start)
+    # barring some more advanced caching system, hardcode the ones that aren't covered by sequences
+    if start ==8581 and index == 30:
+        return gmpy2.mpz(141208584732202933985043597872957492707358144318898872118657282339712271572179267100961675026279141122923937150499405940373529391974355377191956123135236318070713628724204458523041098923271739111961931134010370314342166029850673324166944214136572106328571511680331336580294798956198380164563517386197075765008807910833827575527000953962444164505805867723402565423188465258799151305597345590623940408489172824801857943743118709126)
+    if start == 32687 and index == 50:
+        return gmpy2.mpz(19033201879619270402836051492132922474567096416370720465158118270967813749526574849563756720180026369762174906193978202911884183636178999932103022728084118049163378067635655471312637319818549960822047884032827877827239197034786099291510484521370151175866321866950899079569130034048984181882415094900713147633987083653290880784834771937594801407458270830558180971138040640917443115114371556093261510)
+    sequence = None
+    if start == 2:
+        sequence = A000945
+    elif start == 5:
+        sequence = A051308
+    elif start == 11:
+        sequence = A051309
+    elif start == 89:
+        sequence = A051328
+    elif start == 8191:
+        sequence = A051334
+    elif start == 127:
+        sequence = A051335
+    if sequence:
+        return math.prod(sequence(k) for k in range(1, index+1))
+    partial_product = euclid_mullin_product(start, index-1)
+    return partial_product * smallest_prime_factor(partial_product + 1, digit_limit=None)
