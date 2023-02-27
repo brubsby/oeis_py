@@ -13,7 +13,7 @@ class A178914(Sequence):
     @staticmethod
     def num_digits(n):
         if n == 0:
-            return 1
+            return gmpy2.mpz(1)
         return gmpy2.floor(gmpy2.log10(n))+1
 
     def calculate(self, n):

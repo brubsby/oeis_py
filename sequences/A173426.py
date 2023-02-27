@@ -1,8 +1,8 @@
 import logging
 import sys
 
-import A000422
-import A007908
+from sequences import A000422
+from sequences import A007908
 from sequence import Sequence
 
 

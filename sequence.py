@@ -182,4 +182,9 @@ class Sequence:
     def delete_checkpoint(self, n=None):
         checkpoint.delete(filename=self.get_dat_filename(n))
 
+    # implement this method to generate composites for a sequence that need to be factored
+    def composite_generator(self):
+        raise NotImplementedError
+
+
 

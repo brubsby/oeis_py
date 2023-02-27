@@ -1,4 +1,5 @@
 import copy
+import functools
 import logging
 import math
 import time
@@ -137,6 +138,8 @@ def factordb_get_smallest_factor(n, num_retries=10, sleep_time=2, digit_limit=10
     if status in ["FF"]:
         return f.get_factor_list()[0]
     factors = f.get_factor_list()
+    if not factors:
+        return -1
     if len(factors) == 1 or gmpy2.num_digits(factors[0]) > digit_limit:
         if num_retries >= 0:
             if sleep_time > 0:
@@ -213,6 +216,23 @@ def factordb_prime_signature(n, num_retries=10, sleep_time=2):
             return recurse_val
     logging.debug(f"Unable to find prime signature for {n}")
     return -1
+
+
+def factordb_get_remaining_composites(n):
+    logging.debug(f"Checking factordb for remaining composite factors of: {n}")
+    f = FactorDB(n)
+    f.connect()
+    status = f.get_status()
+    if f.result is None:  # probably number too big
+        return [n]
+    if status in ["P", "PRP", "Prp", "Unit", "FF"]:
+        return []
+    if status in ["C", "U"]:
+        return [n]
+    if status in ["CF"]:
+        return list(filter(lambda x: not prime.is_prime(x, check_factor_db=True, care_probable=True), f.get_factor_list()))
+    assert False, f"Unknown factordb status: {status} for {n}"
+
 
 
 def trial_div_until(n, until=None, divisors=__trialdivisors):

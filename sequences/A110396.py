@@ -2,8 +2,10 @@ import itertools
 import sys
 import logging
 
+import gmpy2
+
 from sequence import Sequence
-import A178914
+from sequences import A178914
 
 
 class A110396(Sequence):
@@ -12,9 +14,9 @@ class A110396(Sequence):
         super().__init__(lookup_list=[], start_index=1, iterative_lookup=True)
 
     def calculate(self, n):
-        if n == 0:
-            return 1
-        return A178914(n)*self(n-1)
+        if n == 1:
+            return gmpy2.mpz(9)
+        return A178914(n) * self(n-1)
 
 
 sys.modules[__name__] = A110396()

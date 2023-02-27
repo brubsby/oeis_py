@@ -1,5 +1,6 @@
 import itertools
 import logging
+import math
 import os
 import subprocess
 import shutil
@@ -23,7 +24,7 @@ __in_house_trialdiv_digit_limit = 100
 
 
 # public api, 0 composite, 1 probable prime, 2 definite prime
-def is_prime(n, check_factor_db=False, factordb_pfgw_limit=__pfgw_factordb_digit_limit, trial_div_limit=__in_house_trialdiv_digit_limit):
+def is_prime(n, check_factor_db=False, care_probable=True, factordb_pfgw_limit=__pfgw_factordb_digit_limit, trial_div_limit=__in_house_trialdiv_digit_limit):
     if type(n) != gmpy2.mpz:
         n = gmpy2.mpz(n)
     # below this limit we know gmpy2 does not get fooled by prps and is pretty fast
@@ -44,7 +45,7 @@ def is_prime(n, check_factor_db=False, factordb_pfgw_limit=__pfgw_factordb_digit
         return prp_test_pfgw(n)  # not checking factordb, just test
     else:
         pfgw_result = prp_test_pfgw(n)  # smaller number, start with pfgw, it might do more trial div than we did
-        if check_factor_db:  # we have the pfgw result, but want to check with factordb if we got probable prime
+        if check_factor_db and care_probable:  # we have the pfgw result, but want to check with factordb if we got probable prime
             if pfgw_result != 1:
                 return pfgw_result
             # we were told to check factordb, at least see if factordb knows for sure
@@ -145,14 +146,27 @@ def prp_test_pfgw(expr):
     return 0
 
 
-def generator(start=0):
+def generator(start=0, start_nth=False):
     iterator = primesieve.Iterator()
-    iterator.skipto(max(start-1, 0))
+    if start_nth:
+        assert start > 0
+        for i in range(start-1):
+            iterator.next_prime()
+    else:
+        iterator.skipto(max(start-1, 0))
     while True:
         yield iterator.next_prime()
 
 
+# tested this to be the fastest way to do it out of a lot
+def nth_primorial(n):
+    return math.prod(primesieve.n_primes(n), start=gmpy2.mpz(1))
+
+
 if __name__ == "__main__":
+
+    print(next(generator))
+
     code = """
 import random
 import primetest

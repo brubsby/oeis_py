@@ -2,7 +2,7 @@ import sys
 
 import gmpy2
 
-import A045918
+from sequences import A045918
 from sequence import Sequence
 
 
