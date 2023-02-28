@@ -1,10 +1,11 @@
+import copy
 import importlib
+import math
+import operator
 import re
 
 import gmpy2
 import sympy
-import primesieve
-from modules import prime
 
 # fourFn.py
 #
@@ -28,20 +29,20 @@ from pyparsing import (
     Regex,
     ParseException,
     CaselessKeyword,
-    Keyword,
     Suppress,
     delimitedList,
-    Combine,
-    Optional
+    Optional,
+    Keyword
 )
-import math
-import operator
+
+from pyparsing import pyparsing_common as ppc
 
 from modules import factor
+from modules import prime
 from sequences import A000058
 from sequences import A000073
-from sequences import A110396
 from sequences import A007908
+from sequences import A110396
 
 _exprStack = []
 
@@ -91,6 +92,7 @@ def _BNF():
         lpar, rpar = map(Suppress, "()")
         lbrace, rbrace = map(Suppress, "{}")
         lbrack, rbrack = map(Suppress, "[]")
+        comma = Suppress(",")
         addop = plus | minus
         multop = mult | div
         expop = Literal("^")
@@ -109,10 +111,20 @@ def _BNF():
             _exprStack.append(t[1])
             _exprStack.append(t[2])
 
+        def range_parse(t):
+            fn = t.pop(0)
+            identifier = t[2]
+            start = t[3]
+            end = t[4]
+            t.insert(0, (fn, identifier, start, end))
+
 
         euclidmullin = (Literal("EuclidMullin") + Optional(lbrack + fnumber + rbrack, "2") + fnumber).setParseAction(
             euclid_mullin_parse
         )
+        prod = (Literal("prod") + lpar + expr + comma + ident + Suppress("=")
+                + ppc.signed_integer + Suppress("..")
+                + ppc.signed_integer + rpar).setParseAction(range_parse)
 
         fn_call = (ident + lpar - Group(expr_list) + rpar).setParseAction(
             insert_fn_argcount_tuple
@@ -120,7 +132,7 @@ def _BNF():
         atom = (
             addop[...]
             + (
-                (euclidmullin | fn_call | pi | e | fnumber | ident).setParseAction(_push_first)
+                (prod | euclidmullin | fn_call | pi | e | fnumber | ident).setParseAction(_push_first)
                 | Group(lpar + expr + rpar)
             ) + unop.setParseAction(_push_first)[...]
         ).setParseAction(_push_unary)
@@ -175,25 +187,40 @@ _fn = {
 }
 
 
-def _evaluate_stack(s):
-    op, num_args = s.pop(), 0
+def _evaluate_stack(s, state=None):
+    if not state:
+        state = {}
+    popped, num_args = s.pop(), 0
+    op = popped
     if isinstance(op, tuple):
-        op, num_args = op
+        if len(op) == 2:
+            op, num_args = op
+        else:
+            op = popped[0]
+    if type(op) == int:
+        return op
     if op == "EuclidMullin":
-        term_index = _evaluate_stack(s)
-        first_term = _evaluate_stack(s)
+        term_index = _evaluate_stack(s, state)
+        first_term = _evaluate_stack(s, state)
         # get the euclid mullen number to be factored
         return factor.euclid_mullin_product(first_term, term_index-1) + 1
+    elif op == "prod":
+        end_range_incl = popped[3]
+        start_range_incl = popped[2]
+        identifier = popped[1]
+        expression = copy.deepcopy(s)
+        product = math.prod([_evaluate_stack(copy.deepcopy(expression), state=state | {identifier: k}) for k in range(start_range_incl, end_range_incl + 1)])
+        return product
     elif op == "unary -":
-        return -_evaluate_stack(s)
+        return -_evaluate_stack(s, state)
     elif op == "!":
-        return gmpy2.fac(_evaluate_stack(s))
+        return gmpy2.fac(_evaluate_stack(s, state))
     elif op == "#":
-        return prime.primorial(_evaluate_stack(s))
+        return prime.primorial(_evaluate_stack(s, state))
     elif op in "+-*/^":
         # note: operands are pushed onto the stack in reverse order
-        op2 = _evaluate_stack(s)
-        op1 = _evaluate_stack(s)
+        op2 = _evaluate_stack(s, state)
+        op1 = _evaluate_stack(s, state)
         return _opn[op](op1, op2)
     elif op == "PI":
         return math.pi  # 3.1415926535
@@ -201,13 +228,15 @@ def _evaluate_stack(s):
         return math.e  # 2.718281828
     elif op in _fn:
         # note: args are pushed onto the stack in reverse order
-        args = reversed([_evaluate_stack(s) for _ in range(num_args)])
+        args = reversed([_evaluate_stack(s, state) for _ in range(num_args)])
         return _fn[op](*args)
     elif re.match(r"A\d{6}", op):
         # note: args are pushed onto the stack in reverse order
-        args = reversed([_evaluate_stack(s) for _ in range(num_args)])
+        args = list(reversed([_evaluate_stack(s, state) for _ in range(num_args)]))
         return gmpy2.mpz(importlib.import_module(f"sequences.{op}")(*args))
     elif op[0].isalpha():
+        if op in state:
+            return state[op]
         raise Exception("invalid identifier '%s'" % op)
     else:
         # try to evaluate as int first, then as float if int fails
@@ -243,6 +272,8 @@ if __name__ == "__main__":
             else:
                 print(s + "!!!", val, "!=", expected, results, "=>", _exprStack)
 
+    test("prod(A000946(k),k=1..14)+1", gmpy2.fac(8))
+    test("prod(k,k=1..8)", gmpy2.fac(8))
     test("EuclidMullin52", 96829488818499592481168771836336683023181156945795350980834458372199490598743221067775290195641203125439681639536219726888871822435629511515837059837171813128663335953886175536897367740550240372528813404899458874513057418332695709006061299277468749241875966062032012477732299909160292749026996368849279816035027111164073836173908645011)
     test("EuclidMullin[89]79", 11174617834364236795841009048233307300266825806821422768355693373365085032585044193459792474481968534214012129338582609223777313906676835876512016253134736446357244064548876600154122498493336254078690308702387774957116102193153114003470199116309299587255991548961775026348706644057280189730066638814807136216048503660514558885943442917252155683194807171395786420042916143788146664817225907035132966072525490126951084348500242420179655236405362096465417821955926267527178066851665196294594188032518202793351207396724701134942229850943352554573712322632224284217403442359968160098745805723478409060133345414496102693644080400204614617480555946617395294653880623668910385640647413239838375624590534991034996755408130348770236930183011337721064071)
     test("EuclidMullin[8191]60", 8282089243446473211387684636969237867638878560572521325217278223996825743484686294904224706272288789954840578990605617587341463889169512704364420619434904332537477485387539288196099910681975906215779951603268145410370249046577878320501841985614222467391716530554622300331305118091323357851046588721123252761073612195879641026231)
