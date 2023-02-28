@@ -30,8 +30,10 @@ if __name__ == "__main__":
 
     db = OEISFactorDB()
     # db.process_parsed_wiki_page(db.parse_wiki_page())
+
+    composite_size_limit = 200
     while True:
-        composite_row = db.get_easiest_composite(digit_limit=1000)
+        composite_row = db.get_easiest_composite(digit_limit=composite_size_limit)
         root_logger.info(f"selected C{composite_row['digits']} belonging to {composite_row['expression']}, with existing work t{composite_row['t_level']:.02f}")
         composite = composite_row['value']
         work = float(composite_row['t_level'])

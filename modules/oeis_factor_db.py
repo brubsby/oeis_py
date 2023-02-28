@@ -320,6 +320,6 @@ if __name__ == "__main__":
     root_logger.addHandler(handler)
 
     db = OEISFactorDB()
-    # db.process_parsed_wiki_page(db.parse_wiki_page())
+    db.process_parsed_wiki_page(db.parse_wiki_page())
     # print(db.get_easiest_composite())
     [print(row["id"]) for row in db.get_sequences_with_no_composites()]

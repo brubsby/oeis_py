@@ -98,6 +98,7 @@ def prime_signature(n, factors=None, divisors=__trialdivisors, check_factor_db=T
     return list(factor_dict.values())
 
 
+# TODO update this to
 def smallest_prime_factor(n, divisors=__trialdivisors, check_factor_db=True, digit_limit=10):
     if type(n) != gmpy2.mpz:
         n = gmpy2.mpz(n)
