@@ -300,7 +300,8 @@ def get_all_proper_divisors(n, threads=1, work=None):
         divisor = math.prod(this_factor_power_list)
         if divisor == n:
             return divisors
-        divisors.append(divisor)
+        if divisor > 1:
+            divisors.append(divisor)
         for i, generator in enumerate(factor_powers_generator_list):
             next_factor_power = next(generator, None)
             if next_factor_power:

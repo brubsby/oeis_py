@@ -165,3 +165,4 @@ pfgw.ini
 *.ptr
 scratch.py
 /data/db/
+/data/logs/
