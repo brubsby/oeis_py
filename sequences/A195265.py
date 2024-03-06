@@ -4,7 +4,7 @@ import logging
 
 from sequence import Sequence
 
-import A080670
+from sequences import A080670
 
 
 class A195265(Sequence):

@@ -1,5 +1,8 @@
 import copy
+import functools
 import importlib
+import itertools
+import logging
 import math
 import operator
 import re
@@ -32,7 +35,9 @@ from pyparsing import (
     Suppress,
     delimitedList,
     Optional,
-    Keyword
+    Keyword,
+    PrecededBy,
+    Combine
 )
 
 from pyparsing import pyparsing_common as ppc
@@ -86,7 +91,8 @@ def _BNF():
         # or use provided pyparsing_common.number, but convert back to str:
         # fnumber = ppc.number().addParseAction(lambda t: str(t[0]))
         fnumber = Regex(r"[+-]?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?")
-        ident = Word(alphas, alphanums + "_$")
+        # ident = Word(alphas, alphanums + "_$")
+        ident = Regex(r'[a-zA-Z_](?:[a-zA-Z0-9_]*[a-zA-Z0-9])?')
 
         plus, minus, mult, div = map(Literal, "+-*/")
         lpar, rpar = map(Suppress, "()")
@@ -104,8 +110,10 @@ def _BNF():
         # add parse action that replaces the function identifier with a (name, number of args) tuple
         def insert_fn_argcount_tuple(t):
             fn = t.pop(0)
+            sub = t.pop(0)
+            sup = t.pop(0)
             num_args = len(t[0])
-            t.insert(0, (fn, num_args))
+            t.insert(0, (fn, num_args, sub, sup))
 
         def euclid_mullin_parse(t):
             _exprStack.append(t[1])
@@ -113,26 +121,28 @@ def _BNF():
 
         def range_parse(t):
             fn = t.pop(0)
-            identifier = t[2]
-            start = t[3]
-            end = t[4]
+            identifier = t[1]
+            start = t[2]
+            end = t[3]
             t.insert(0, (fn, identifier, start, end))
 
 
         euclidmullin = (Literal("EuclidMullin") + Optional(lbrack + fnumber + rbrack, "2") + fnumber).setParseAction(
             euclid_mullin_parse
         )
-        prod = (Literal("prod") + lpar + expr + comma + ident + Suppress("=")
-                + ppc.signed_integer + Suppress("..")
-                + ppc.signed_integer + rpar).setParseAction(range_parse)
+        range_func = ((Literal("concat") | Literal("prod")) + lpar + Group(expr) + comma + ident + Suppress("=")
+                      + ppc.signed_integer + Suppress("..")
+                      + ppc.signed_integer + rpar).setParseAction(range_parse)
 
-        fn_call = (ident + lpar - Group(expr_list) + rpar).setParseAction(
+        fn_call = (ident + (Optional(Suppress("_") + lbrace + ppc.signed_integer + rbrace, None)
+                   + Optional(Suppress("^") + lbrace + ppc.signed_integer + rbrace, None))
+                   + lpar - Group(expr_list) + rpar).setParseAction(
             insert_fn_argcount_tuple
         )
         atom = (
             addop[...]
             + (
-                (prod | euclidmullin | fn_call | pi | e | fnumber | ident).setParseAction(_push_first)
+                (range_func | euclidmullin | fn_call | pi | e | fnumber | ident).setParseAction(_push_first)
                 | Group(lpar + expr + rpar)
             ) + unop.setParseAction(_push_first)[...]
         ).setParseAction(_push_unary)
@@ -179,7 +189,7 @@ _fn = {
     "Lucas": gmpy2.lucas,
     "Euler": sympy.euler,
     "Pell": lambda n: gmpy2.lucasu(2, -1, n),
-    "Phi_": lambda n, x: sympy.polys.specialpolys.cyclotomic_poly(n, x),
+    "Phi": lambda n, x: sympy.polys.specialpolys.cyclotomic_poly(n, x),
     "tens_complement_factorial": A110396,
     "Tribonacci": A000073,
     "Sylvester": A000058,
@@ -193,10 +203,12 @@ def _evaluate_stack(s, state=None):
     popped, num_args = s.pop(), 0
     op = popped
     if isinstance(op, tuple):
-        if len(op) == 2:
-            op, num_args = op
-        else:
+        if op[0] in ["concat", "prod"]:  # special range functions
             op = popped[0]
+        elif len(op) == 4:
+            op, num_args, sub, sup = op
+        else:
+            assert f"unusual tuple encountered {op}"
     if type(op) == int:
         return op
     if op == "EuclidMullin":
@@ -204,13 +216,22 @@ def _evaluate_stack(s, state=None):
         first_term = _evaluate_stack(s, state)
         # get the euclid mullen number to be factored
         return factor.euclid_mullin_product(first_term, term_index-1) + 1
-    elif op == "prod":
+    if op == "Phi":
+        # note: args are pushed onto the stack in reverse order
+        args = list(reversed([_evaluate_stack(s, state) for _ in range(num_args)]))
+        return gmpy2.mpz(sympy.polys.specialpolys.cyclotomic_poly(sub, *args))
+    elif op in ["prod", "concat"]:
         end_range_incl = popped[3]
         start_range_incl = popped[2]
         identifier = popped[1]
         expression = copy.deepcopy(s)
-        product = math.prod([_evaluate_stack(copy.deepcopy(expression), state=state | {identifier: k}) for k in range(start_range_incl, end_range_incl + 1)])
-        return product
+        values = [_evaluate_stack(copy.deepcopy(expression), state=state | {identifier: k}) for k in range(start_range_incl, end_range_incl + 1)]
+        s.pop()
+        s.pop()
+        if op == "prod":
+            return math.prod(values)
+        elif op == "concat":
+            return gmpy2.mpz("".join(map(str, values)))
     elif op == "unary -":
         return -_evaluate_stack(s, state)
     elif op == "!":
@@ -226,14 +247,16 @@ def _evaluate_stack(s, state=None):
         return math.pi  # 3.1415926535
     elif op == "E":
         return math.e  # 2.718281828
-    elif op in _fn:
+    elif op in _fn or re.match(r"A\d{6}", op):
         # note: args are pushed onto the stack in reverse order
         args = reversed([_evaluate_stack(s, state) for _ in range(num_args)])
-        return _fn[op](*args)
-    elif re.match(r"A\d{6}", op):
-        # note: args are pushed onto the stack in reverse order
-        args = list(reversed([_evaluate_stack(s, state) for _ in range(num_args)]))
-        return gmpy2.mpz(importlib.import_module(f"sequences.{op}")(*args))
+        if re.match(r"A\d{6}", op):
+            function = importlib.import_module(f"sequences.{op}")
+        else:
+            function = _fn[op]
+        if sup:
+            return functools.reduce(lambda total, _: gmpy2.mpz(function(total)), [None] * (sup - 1), gmpy2.mpz(function(*args)))
+        return gmpy2.mpz(function(*args))
     elif op[0].isalpha():
         if op in state:
             return state[op]
@@ -256,6 +279,7 @@ def evaluate(s):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
 
     def test(s, expected):
         _exprStack[:] = []
@@ -272,7 +296,13 @@ if __name__ == "__main__":
             else:
                 print(s + "!!!", val, "!=", expected, results, "=>", _exprStack)
 
-    test("prod(A000946(k),k=1..14)+1", gmpy2.fac(8))
+    test("prod(A057204(k),k=1..3)+1", 10812186008)
+    test("1+prod(A057204(k),k=1..3)", 10812186008)
+    test("A048985^{281}(2295)", 2212686725588660190846701777565322981741192119760405080395040470274676741341850761753500834257532037731919663954846125186454002551800699483997598384785995154171692759349610428638356492885427)
+    test("A037276^{118}(49)", 31591559896269666666598271323929987368130648086914375205708609469455240795758009093092999931626631706893838237446804628957426949545161439643850763983152977771070456646529606514514350669236880120878528179383004060084979184123521819930400481691041161410407051)
+    test("A037279^{6}(45)", 3892671338076267963305029515140142288038899150885453119088787848734147626843935726636354620244288053172572979899573149720435239786397718939698719449161305719359172289952110620103251187363409887168698563318603097535620902296613344284334156543954945215129395794858217656476927948910328530024696318648356453881873845746529694307838467306413057399324119901241465162257423813714264465874521)
+    test("concat(A096098(n),n=1..182)", 2137172159917311231614913913119331714893313989693097350956401900335673788279883089441874368101349387565144329514794708322449496611129187318115445779738875162190709978635216773353105931774129972074283243741173911727812075787378324999312471699177231631792344939321127431431091571232871678765761317431885993284310167360035080796986373547322110793237351594132031891335714335371291476091195370387301194117309293111094875399352277254491097922726362179086360119613807679012053208714609259163489113472773310673291416142779311192931536237937132096272511001805031245882596336066472939944538252112536340232517408717793279139793692531289149267631834515919681091863134719558940415713041943033312695034931194346912433233215517731531474615891712432237334915920124234119135727363756346346159225916140631352373950607328978723397710360542059415905008646558829120515833465267264969791563446331411004639194564199773144948794542507892997402567498103471057853892370914753907813696111707867888633718659000600692781584845032382558783999508242587307666076050268497431783395958351593212987417535334628170845947300973667321519947026395481495407161860303064607682815018818390412336833053721408080287457734580882837998969271155315289907696807323679484224920252246480630857766938642839937655999423556658561903731734583000681128249182118709989438483909962114094953262774793519320480607182210372192600620254714452263362689660672770359218888032822485785380879472115343751901553845211937257773891886542385167024093255540636600775198972618516952827648471579246991951701001622915118611577913750077576063667988327264981)
+    test("prod(A000946(k),k=1..14)+1", 110721465493002960453669737626182095929861002444217630084728101840814389517145776947757647185681033716504925247273515756720076434129863468366272908514227824139272687809696635619251625371039464763992521352908321920697230358329690909804157733806149260259095949192261207550664145547314786038676638526563069026548149264840040649770821659684890735628731429655066437369046403043)
     test("prod(k,k=1..8)", gmpy2.fac(8))
     test("EuclidMullin52", 96829488818499592481168771836336683023181156945795350980834458372199490598743221067775290195641203125439681639536219726888871822435629511515837059837171813128663335953886175536897367740550240372528813404899458874513057418332695709006061299277468749241875966062032012477732299909160292749026996368849279816035027111164073836173908645011)
     test("EuclidMullin[89]79", 11174617834364236795841009048233307300266825806821422768355693373365085032585044193459792474481968534214012129338582609223777313906676835876512016253134736446357244064548876600154122498493336254078690308702387774957116102193153114003470199116309299587255991548961775026348706644057280189730066638814807136216048503660514558885943442917252155683194807171395786420042916143788146664817225907035132966072525490126951084348500242420179655236405362096465417821955926267527178066851665196294594188032518202793351207396724701134942229850943352554573712322632224284217403442359968160098745805723478409060133345414496102693644080400204614617480555946617395294653880623668910385640647413239838375624590534991034996755408130348770236930183011337721064071)

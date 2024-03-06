@@ -15,7 +15,7 @@ class A037279(Sequence):
     def calculate(self, n):
         if n == 1:
             return gmpy2.mpz(1)
-        return gmpy2.mpz("".join([gmpy2.digits(divisor) for divisor in sorted(factor.get_all_proper_divisors(n))]))
+        return gmpy2.mpz("".join([gmpy2.digits(divisor) for divisor in sorted(factor.proper_divisors(n))]))
 
 
 sys.modules[__name__] = A037279()

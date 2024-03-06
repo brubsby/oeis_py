@@ -1,3 +1,4 @@
+import heapq
 import logging
 import os
 import re
@@ -11,7 +12,7 @@ from lxml import html
 
 import gmpy2
 
-from modules import ecmprobs, expression, factor, prime
+from modules import ecmprobs, expression, factor, prime, ecmtimes, yafu
 
 DB_NAME = "oeis_factor.db"
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "db", DB_NAME)
@@ -86,6 +87,7 @@ class OEISFactorDB:
             PRIMARY KEY (composite_id, sequence_id)
         );
         """)
+        # todo make view
 
     def add_sequence(self, sequence_id, more=None, factor_requirement=None, first_unknown_n=None, first_unknown_k=None):
         cursor = self.connection.cursor()
@@ -154,7 +156,7 @@ class OEISFactorDB:
         info_lines = list(filter(lambda line: re.search(r"^A[0-9]{6}", line), text.split("\n")))
         work_regex = re.compile(r"(\d+)@(\d+(?:(?:e|\*10\^)\d+)?)")
         t_level_regex = re.compile(r"\Wt(\d{1,2})")
-        sequence_id_regex = re.compile(r"A\d{6}(?!\()")
+        sequence_id_regex = re.compile(r"A\d{6}(?![(^_])")
         composite_digits_regex = re.compile(r"\WC(\d+)")
         expression_regex = re.compile(r"C(?:\d+|big)\s{1,15}(\*?)(.*?)(?:t\d+|\d+@|\s{2,}|$)")
         parsed_data = []
@@ -229,7 +231,6 @@ class OEISFactorDB:
         if result:
             return result['t_level']
 
-
     def update_work(self, composite, new_work):
         assert composite is not None
         cursor = self.cursor()
@@ -249,7 +250,7 @@ class OEISFactorDB:
             cursor = self.cursor()
             # see if we have anything for this new composite already
             cursor.execute("SELECT id, t_level FROM composite WHERE value = ?;", (pickle.dumps(new_composite),))
-            new_composite_id, new_work = cursor.fetchone()
+            new_composite_id, new_work = cursor.fetchone() or (None, None)
             # get the metadata for the old composite
             cursor.execute("SELECT id, t_level FROM composite WHERE value = ?;", (pickle.dumps(old_composite),))
             old_composite_id, old_work = cursor.fetchone()
@@ -274,16 +275,32 @@ class OEISFactorDB:
             # multiple new composites (not likely to happen)
             raise NotImplementedError(f"Multiple composites found in place of old composite:\nold:{old_composite}\nnew={remaining_composites}")
 
-    def get_easiest_composite(self, digit_limit=500):
+    def get_easiest_composite(self, digit_limit=500, threads=1):
         cur = self.cursor()
         cur.execute(f"SELECT id, value, t_level, expression, digits FROM composite WHERE digits < ? ORDER BY t_level ASC, digits ASC", (digit_limit,))
         result = cur.fetchall()
-        for composite_row in result:
+        tuples = list(map(lambda row: (self.get_ecm_time(int(row['digits']), int(row['t_level']), ((int(row['t_level']) // 5) + 1) * 5, threads=threads), row), result))
+        tuples = sorted(tuples, key=lambda x: x[0])
+        for completion_time, composite_row in tuples:
+            if self.validate_stored_composite_unfactored(composite_row['value']):
+                return composite_row, completion_time
+            else:
+                return self.get_easiest_composite(digit_limit=digit_limit, threads=threads)
 
+    def get_smallest_composite(self, digit_limit=500):
+        cur = self.cursor()
+        cur.execute(f"SELECT id, value, t_level, expression, digits FROM composite WHERE digits < ? ORDER BY digits ASC", (digit_limit,))
+        result = cur.fetchall()
+        for composite_row in result:
             if self.validate_stored_composite_unfactored(composite_row['value']):
                 return composite_row
             else:
-                return self.get_easiest_composite(digit_limit=digit_limit)
+                return self.get_smallest_composite(digit_limit=digit_limit)
+
+    def get_ecm_time(self, digits, start_work, end_work, threads=1):
+        b1, curves = yafu.get_b1_curves(start_work, end_work)
+        return ecmtimes.get_ecm_time(digits, b1, curves, threads=threads)
+
 
     def get_smallest_known_composites_with_no_values(self):
         cur = self.connection.cursor()

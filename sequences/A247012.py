@@ -16,7 +16,7 @@ class A247012(Sequence):
         for k in itertools.count(start=k):
             self.checkpoint(k, k, 10000, n=n)
             revk = base.digrev(k)
-            divisors = factor.get_all_proper_divisors(k)
+            divisors = factor.proper_divisors(k)
             value = 0
             old_value = None
             while value < revk:

@@ -167,32 +167,42 @@ def primorial(p):
     return math.prod(primesieve.primes(2, p), start=gmpy2.mpz(1))
 
 
+def previous_prime(val):
+    if val <= 2:
+        return gmpy2.mpz(0)
+    if val == 3:
+        return gmpy2.mpz(2)
+    return gmpy2.prev_prime(val)
+
+
 if __name__ == "__main__":
 
-    print(next(generator))
+    print([previous_prime(n) for n in range(30)])
 
-    code = """
-import random
-import primetest
-import gmpy2
-random.seed(42)
-magnitude = {}
-low = pow(gmpy2.mpz(10), gmpy2.mpz(magnitude))
-high = low * 10
-for i in range({}):
-    num = gmpy2.mpz(random.randrange(low, high))
-    {}
-"""
-    functions = [
-        "primetest.is_prime(num)",
-        "primetest.trial_div_prime_test(num)",
-        "primetest.prp_test_pfgw(num)",
-    ]
-    for magnitude_counter in itertools.count(start=124):
-        magnitude = 1000 * magnitude_counter
-        tests = 1
-        for i, function in enumerate(functions):
-            # if i == 2 and magnitude < 100000:
-            #     break
-            print(f"{timeit.timeit(code.format(magnitude, tests, function), number=1):.010f}, ", end="")
-        print(f"magnitude: {magnitude}")
+#     print(next(generator))
+#
+#     code = """
+# import random
+# import primetest
+# import gmpy2
+# random.seed(42)
+# magnitude = {}
+# low = pow(gmpy2.mpz(10), gmpy2.mpz(magnitude))
+# high = low * 10
+# for i in range({}):
+#     num = gmpy2.mpz(random.randrange(low, high))
+#     {}
+# """
+#     functions = [
+#         "primetest.is_prime(num)",
+#         "primetest.trial_div_prime_test(num)",
+#         "primetest.prp_test_pfgw(num)",
+#     ]
+#     for magnitude_counter in itertools.count(start=124):
+#         magnitude = 1000 * magnitude_counter
+#         tests = 1
+#         for i, function in enumerate(functions):
+#             # if i == 2 and magnitude < 100000:
+#             #     break
+#             print(f"{timeit.timeit(code.format(magnitude, tests, function), number=1):.010f}, ", end="")
+#         print(f"magnitude: {magnitude}")

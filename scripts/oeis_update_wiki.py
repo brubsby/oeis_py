@@ -57,6 +57,8 @@ if __name__ == "__main__":
         remaining_composites = factor.factordb_get_remaining_composites(value)
         if len(remaining_composites) == 0:
             updated_lines.append(re.sub(work_regex, "[factored]", line))
+            if "[factored]" not in updated_lines[-1]:
+                updated_lines[-1] = updated_lines[-1] + "[factored]"
             # factored completely
             continue
         # check composite length

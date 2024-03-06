@@ -18,7 +18,7 @@ class A110759(Sequence):
 sys.modules[__name__] = A110759()
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
     seq = A110759()
     seq.generate_b_file(term_cpu_time=10)
     for n, val in seq.enumerate():

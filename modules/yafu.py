@@ -1,6 +1,7 @@
 import functools
 import itertools
 import logging
+import math
 import os
 import shutil
 import subprocess
@@ -30,21 +31,21 @@ def factor(expr, stop_after_one=False, report_to_factordb=True, threads=1, work=
     str_expr = f"factor({str(expr)})"
     start_time = time.time()
     this_uuid = uuid.uuid4()
-    yafu_dir = "C:/Users/Tyler/Downloads/yafu-2.9/"
+    yafu_dir = "C:/Software/yafu-master/"
     dirpath = os.path.join("..", "data", "temp", str(this_uuid))
     filename = f"temp-{this_uuid}.dat"
     temp_filepath = os.path.join(dirpath, filename)
     proc = None
     try:
         os.makedirs(dirpath, exist_ok=True)
-        # symlink the yafu.ini so we can use it from the throwaway temp dir without polluting the yafu directory with
+        # copy the yafu.ini, so that we can use it from the throwaway temp dir without polluting the yafu directory with
         # logs and restart points
         shutil.copy(os.path.join(yafu_dir, "yafu.ini"), os.path.join(dirpath, "yafu.ini"))
         with open(temp_filepath, "w") as temp:
             temp.write(f"{str_expr}\n")
         factors_filename = "factors.out"
         popen_arglist = [
-            os.path.join(yafu_dir, "yafu-x64.exe"), "-of", factors_filename,
+            os.path.join(yafu_dir, "yafu-x64-gc.exe"), "-of", factors_filename, "-v"
         ]
         if stop_after_one:
             popen_arglist.append("-one")
@@ -60,7 +61,7 @@ def factor(expr, stop_after_one=False, report_to_factordb=True, threads=1, work=
         proc = subprocess.Popen(popen_arglist,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE,
                                 universal_newlines=True, cwd=dirpath, bufsize=1)
-        print(str_expr, file=proc.stdin, flush=True)
+        print(f"{str_expr}\n", file=proc.stdin, flush=True)
         proc.stdin.close()
         for i, line in enumerate(proc.stdout):
             logger.debug(line[:-1])
@@ -112,3 +113,34 @@ def factor(expr, stop_after_one=False, report_to_factordb=True, threads=1, work=
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     print(factor("fib(1000)"))
+
+
+# b1 level and number of curves yafu would suggest
+def get_b1_curves(start_work, end_work):
+    assert end_work - start_work > 0, "end_work must be greater than start_work"
+    if end_work <= 15:
+        return 2000, 30
+    if start_work >= 15 and end_work == 20:
+        return 11000, 72
+    if start_work >= 20 and end_work == 25:
+        return 50000, 204
+    if start_work >= 25 and end_work == 30:
+        return 250000, 403
+    if start_work >= 30 and end_work == 35:
+        return 1000000, 826
+    if start_work >= 35 and end_work == 40:
+        return 3000000, 2105
+    if start_work >= 40 and end_work == 45:
+        return 11000000, 3961
+    if start_work >= 45 and end_work == 50:
+        return 43000000, 6419
+    if start_work >= 50 and end_work == 55:
+        return 110000000, 15015
+    if start_work >= 55 and end_work == 60:
+        return 260000000, 35303
+    if start_work >= 60 and end_work == 65:
+        return 860000000, 69407
+    if start_work >= 65:
+        return 25000000000, 300000
+    assert False, f"unsupported start ({start_work}) and end work ({end_work})"
+

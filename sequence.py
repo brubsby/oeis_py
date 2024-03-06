@@ -12,8 +12,10 @@ import modules.checkpoint as checkpoint
 
 class Sequence:
 
-    def __init__(self, start_index=1, no_lookup=False, lookup_list=None, iterative_lookup=False, b_file_lookup=False, caching=True):
+    def __init__(self, start_index=1, no_lookup=False, lookup_list=None, lookup_dict=None, iterative_lookup=False, b_file_lookup=False, caching=True):
         self._lookup = {}
+        if lookup_dict:
+            self._lookup.update(lookup_dict)
         if lookup_list:
             for n, item in enumerate(lookup_list, start=start_index):
                 if item is not None:
@@ -146,6 +148,18 @@ class Sequence:
                 logging.info(line[:-1])
                 if n+1 > max_n:
                     break
+
+    # 260 is usually the max character length for the data section
+    def generate_data_section(self, maxchars=260):
+        generator = self.generate()
+        retval = str(next(generator))
+        if len(retval) > maxchars:
+            return retval
+        for term in generator:
+            candidate_retval = retval + ", " + str(term)
+            if len(candidate_retval) > maxchars:
+                return retval
+            retval = candidate_retval
 
     def cache_b_file_values(self):
         if not os.path.exists(self.get_b_filename()):
