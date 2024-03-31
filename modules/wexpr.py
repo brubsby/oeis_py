@@ -33,9 +33,9 @@ def convert(wexpr, n=10):
             k_abs = diff_num - diff_num // b
             if k_abs % b == 0:
                 k_abs -= 1
-                c -= 18
+                c -= 2 * d
             k[m] = diff_sign * k_abs
-            c += -1 * diff_sign * ((k_abs % 9) + (9 if diff_rep == 9 else 0))
+            c += -1 * diff_sign * ((k_abs % d) + (d if diff_rep == d else 0))
             last_rep = rep
         else:
             section = sum(last_rep * pow(b, i) for i in range(len(part)))
