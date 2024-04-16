@@ -8,6 +8,8 @@ import sys
 # pip install -U pyinstaller
 # and run
 # pyinstaller ecmprobs.py
+# or
+# python -m PyInstaller ecmprobs.py
 # and find the binary in dist
 
 
@@ -739,15 +741,35 @@ if __name__ == "__main__":
         return get_t_level(c_at_b1_strings)
 
 
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=f"       echo <curve_string>[;<curve_string>][...] | %(prog)s [options]\n"
+                    f"       printf <curve_string>[\\\\n<curve_string>][...] | %(prog)s [options]\n"
+                    f"       %(prog)s [options] < <input_file>\n"
+                    f"\n"
+                    f"<curve_string> must full match the regex:\n"
+                    f"  {line_regex}\n"
+                    f"examples: 5208@11e6\n"
+                    f"          5208@11e6,35133391030,1\n"
+                    f"          5208@11e6,35e9,p=3\n"
+                    f"          5208@B1=11e6,B2=35e9,param=0\n"
+                    f"and multiple curve strings must be delimited by semicolons or newlines.")
     # parser.add_argument("-p", "--param", action="store", dest="param")
-    parser.add_argument("-r", "--precision", action="store", dest="precision", default=3, type=int)
+    parser.add_argument(
+        "-r",
+        "--precision",
+        action="store",
+        dest="precision",
+        default=3,
+        type=int,
+        help="t-level decimal precision to display"
+    )
     parser.add_argument(
         "-v",
         "--verbose",
         action="count",
         default=0,
-        help="Verbosity (-v, -vv, etc)")
+        help="verbosity (-v, -vv, etc)")
     parser.add_argument(
         "--version",
         action="version",
@@ -766,7 +788,8 @@ if __name__ == "__main__":
     logging.basicConfig(level=loglevel, format="%(message)s")
 
     try:
-        lines = sys.stdin.readlines()
+        stdinput = sys.stdin.read().strip()
+        lines = re.split(r'(?:;|\r?\n)', stdinput)
         parsed_lines = list(map(parse_line, lines))
         line_validations = list(map(validate_line, zip(lines, parsed_lines)))
         logging.debug(f"Validations: {line_validations}")
