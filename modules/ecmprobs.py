@@ -1,5 +1,15 @@
 import math
 import logging
+import re
+import argparse
+import sys
+
+# to build the binary, download pyinstaller with:
+# pip install -U pyinstaller
+# and run
+# pyinstaller ecmprobs.py
+# and find the binary in dist
+
 
 ecm_probs = [
     ["B1", "B2", "dF", "k", "S", "param", 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100],
@@ -662,7 +672,7 @@ def get_t_level(curve_b1_tuples):
     for curves, b1 in curve_b1_tuples:
         b1_loc = find_b1(b1)
         if b1_loc > len(ecm_probs):
-            logging.error(f"B1 value {b1} not in probability tables, skipping")
+            logging.warning(f"B1 value {b1} not in probability tables, skipping")
         fp.append(get_failure_probabilities(b1, curves, b1_loc))
 
     for i in range(91):
@@ -681,6 +691,90 @@ def get_t_level(curve_b1_tuples):
     diff = get_expected_factor_size(total_dp)
     return diff
 
+
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    print(get_t_level([(123123,int(10**6)),(123123, int(10**8))]))
+    __license__ = "MIT"
+    __version__ = "0.9.0"
+
+    def sci_int(x):
+        if x is None or type(x) in [int]:
+            return x
+        if type(x) != str:
+            raise TypeError(f"sci_int needs a string input, instead of {type(x)} {x}")
+        if x.isnumeric():
+            return int(x)
+        match = re.match(r"^(\d+)(?:e|[x*]10\^)(\d+)$", x)
+        if not match:
+            raise ValueError(f"malformed intger string {x}, could not parse into an integer")
+        return int(match.group(1)) * pow(10, int(match.group(2)))
+
+    line_regex = r"(\d+)@(?:B1=)?(\d+e\d+|\d+)(?:,\s*(?:B2=)?(\d+e\d+|\d+))?(?:,\s*(?:(?:param|p)=)?(\d+))?\s*"
+
+    def parse_line(line):
+        match = re.fullmatch(line_regex, line)
+        if not match:
+            raise ValueError(f"Malformed ecm curve string: \"{line.strip()}\"\n"
+                             f"Must match {line_regex}")
+        curves = sci_int(match.group(1))
+        B1 = sci_int(match.group(2))
+        B2 = sci_int(match.group(3))
+        param = sci_int(match.group(4)) if match.group(4) else 1
+        logging.info(f"Curve string \"{line.strip()}\" parsed as curves={curves}, B1={B1}, B2={B2}, param={param}")
+        return curves, B1, B2, param
+
+
+    # TODO implement B2!=default and param!=1
+    def validate_line(line_tup):
+        line, parsed_line = line_tup
+        curves, B1, B2, param = parsed_line
+        if B2:
+            raise ValueError(f"Problem with curve string: \"{line.strip()}\" only ecm default B2 supported")
+        if param != 1:
+            raise ValueError(f"Problem with curve string: \"{line.strip()}\" only param 1 supported")
+        return True
+
+
+    def convert_lines_to_t_level(parsed_lines):
+        c_at_b1_strings = list(map(lambda line: (line[0], line[1]), parsed_lines))
+        return get_t_level(c_at_b1_strings)
+
+
+    parser = argparse.ArgumentParser()
+    # parser.add_argument("-p", "--param", action="store", dest="param")
+    parser.add_argument("-r", "--precision", action="store", dest="precision", default=3, type=int)
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="Verbosity (-v, -vv, etc)")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version="%(prog)s (version {version})".format(version=__version__))
+    args = parser.parse_args()
+
+    if sys.stdin.isatty():
+        parser.print_help()
+        sys.exit(1)
+
+    loglevel = logging.WARNING
+    if args.verbose > 0:
+        loglevel = logging.INFO
+    if args.verbose > 1:
+        loglevel = logging.DEBUG
+    logging.basicConfig(level=loglevel, format="%(message)s")
+
+    try:
+        lines = sys.stdin.readlines()
+        parsed_lines = list(map(parse_line, lines))
+        line_validations = list(map(validate_line, zip(lines, parsed_lines)))
+        logging.debug(f"Validations: {line_validations}")
+        t_level = convert_lines_to_t_level(parsed_lines)
+        print(f"t{t_level:.{args.precision}f}")
+    except ValueError as e:
+        if loglevel < logging.INFO:
+            logging.exception(e)
+        else:
+            logging.error(e)
+        sys.exit(1)
