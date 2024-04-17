@@ -164,7 +164,7 @@ def nth_primorial(n):
 
 
 def primorial(p):
-    return math.prod(primesieve.primes(2, p), start=gmpy2.mpz(1))
+    return math.prod(primesieve.primes(2, p) if p > 0 else [], start=gmpy2.mpz(1))
 
 
 def previous_prime(val):

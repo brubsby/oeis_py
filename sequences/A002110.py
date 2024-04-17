@@ -20,7 +20,7 @@ class A002110(Sequence):
         return prime.nth_primorial(n)
 
     def generator(self, start):
-        value = self(n) if start > 1 else gmpy2.mpz(1)
+        value = self(start) if start > 1 else gmpy2.mpz(1)
         nth_prime = primesieve.nth_prime(start) if start > 0 else 1
         prime_it = primesieve.Iterator()
         prime_it.skipto(nth_prime)

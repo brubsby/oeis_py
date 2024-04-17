@@ -301,7 +301,6 @@ class OEISFactorDB:
         b1, curves = yafu.get_b1_curves(start_work, end_work)
         return ecmtimes.get_ecm_time(digits, b1, curves, threads=threads)
 
-
     def get_smallest_known_composites_with_no_values(self):
         cur = self.connection.cursor()
         cur.row_factory = sqlite3.Row

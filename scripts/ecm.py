@@ -1877,7 +1877,7 @@ def run_ecm_resume_job(p95_b1, p95_b2):
         my_msg = my_msg + line4 + '\n'
 
         rt = get_runtime(t_total)
-        str_stg1, t_stg1 = get_avg_str(num_resume_lines1, resume_stg1_time) if use_gpu_stage_1 else '0.000s'
+        str_stg1, t_stg1 = get_avg_str(num_resume_lines1, resume_stg1_time) if use_gpu_stage_1 else ('0.000s', '0.000s')
         str_stg2, t_stg2 = get_avg_str(cur_c_completed, t_total)
         write_string_to_log('{0:6d} of {1:6d} | Stg1 {2:s} | Stg2 {3:s} | {4:s} |   0d 00:00:00'
                             .format(tot_c_completed, num_resume_lines, str_stg1, str_stg2, rt))
@@ -1934,7 +1934,7 @@ def run_ecm_resume_job(p95_b1, p95_b2):
         my_msg = my_msg + line9 + '\n'
 
         rt = get_runtime(t_total)
-        str_stg1, t_stg1 = get_avg_str(num_resume_lines1, resume_stg1_time) if use_gpu_stage_1 else '0.000s'
+        str_stg1, t_stg1 = get_avg_str(num_resume_lines1, resume_stg1_time) if use_gpu_stage_1 else ('0.000s', '0.000s')
         str_stg2, t_stg2 = get_avg_str(cur_c_completed, t_total)
         write_string_to_log('{0:6d} of {1:6d} | Stg1 {2:s} | Stg2 {3:s} | {4:s} |   0d 00:00:00'
                             .format(tot_c_completed, num_resume_lines, str_stg1, str_stg2, rt))

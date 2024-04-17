@@ -10,18 +10,6 @@ import re
 import gmpy2
 import sympy
 
-# fourFn.py
-#
-# Demonstration of the pyparsing module, implementing a simple 4-function expression parser,
-# with support for scientific notation, and symbols for e and pi.
-# Extended to add exponentiation and simple built-in functions.
-# Extended test cases, simplified pushFirst method.
-# Removed unnecessary expr.suppress() call (thanks Nathaniel Peterson!), and added Group
-# Changed fnumber to use a Regex, which is now the preferred method
-# Reformatted to latest pypyparsing features, support multiple and variable args to functions
-#
-# Copyright 2003-2019 by Paul McGuire
-#
 from pyparsing import (
     Literal,
     Word,

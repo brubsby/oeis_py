@@ -101,7 +101,7 @@ def timing(vals, counter, iterations=1, total=False, filename=None, cooldown=5):
         else:
             __start = now
             __start_counter = counter
-        log_line += f"val(s): {vals}"
+        log_line += f"counter: {counter}, val(s): {vals}"
         if not cooldown:
             logging.info(log_line)
         elif __last_log and now - __last_log > cooldown:

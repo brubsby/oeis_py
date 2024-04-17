@@ -62,8 +62,8 @@ class Sequence:
     def calculate(self, n):
         raise NotImplementedError
 
-    def list(self, n, no_lookup=False):
-        return [self(i, no_lookup) for i in range(self.start_index, n + 1)]
+    def list(self, n):
+        return [self(i) for i in range(self.start_index, n + 1)]
 
     def generate(self, start=None, alert_time=None, quit_on_alert=False):
         last = time.time() - 0.01

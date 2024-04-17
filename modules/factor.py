@@ -4,6 +4,7 @@ import heapq
 import itertools
 import logging
 import math
+import random
 import time
 
 import gmpy2
@@ -145,6 +146,41 @@ def smallest_prime_factor(n, divisors=__trialdivisors, check_factor_db=True, dig
         # infinite trial division, which will either keep going until it finds a factor, reaches 2^64 (I think)
         # or the surrounding cpu timer code kills it
         return infinite_trial_div(n, until=2)[0]
+
+
+def smallest_prime_factor_generator(n, divisors=__trialdivisors, check_factor_db=True, digit_limit=10):
+    if type(n) != gmpy2.mpz:
+        n = gmpy2.mpz(n)
+    if n < 2:
+        yield n
+        return
+    remaining_composite = n
+    factors = trial_div_until(remaining_composite, 2, divisors)
+    while len(factors) > 1:
+        yield factors[0]
+        if prime.is_prime(factors[1], check_factor_db=check_factor_db):
+            yield factors[1]
+            return
+        remaining_composite = factors[1]
+        factors = trial_div_until(remaining_composite, 2, divisors)
+
+    factordb_smallest_factor = 1
+    while factordb_smallest_factor != -1:
+        factordb_smallest_factor = factordb_get_smallest_factor(remaining_composite, num_retries=0, sleep_time=0, digit_limit=digit_limit)
+        if factordb_smallest_factor != -1:
+            yield factordb_smallest_factor
+            remaining_composite = remaining_composite // factordb_smallest_factor
+            if prime.is_prime(remaining_composite, check_factor_db=check_factor_db):
+                yield remaining_composite
+                return
+
+    not_prime = True
+    while not_prime:
+        factors = infinite_trial_div(remaining_composite, until=2)
+        yield factors[0]
+        remaining_composite = factors[1]
+        not_prime = prime.is_prime(remaining_composite)
+    yield remaining_composite
 
 
 def biggest_prime_factor(n, divisors=__trialdivisors, check_factor_db=True, threads=1, work=None):

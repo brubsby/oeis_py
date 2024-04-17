@@ -1,31 +1,27 @@
 import itertools
 import logging
-import math
 import sys
-
-import gmpy2
 
 from modules import factor, base, prime, semiprime
 from sequence import Sequence
+from sequences import A005282
 
 
-class A051332(Sequence):
+class A058335(Sequence):
 
     def __init__(self):
         super().__init__(lookup_list=[], start_index=1)
 
-    def calculate(self, n):
-        if n == 1:
-            return gmpy2.mpz(65537)
-        return factor.smallest_prime_factor(math.prod(self(k) for k in range(1, n)) + 1, digit_limit=10)
+    def generator(self, start):
+        yield from A005282.mian_chowla_generator(1, 4)
 
 
-sys.modules[__name__] = A051332()
+sys.modules[__name__] = A058335()
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    seq = A051332()
-    # print(seq.generate_data_section())
-    seq.generate_b_file(term_cpu_time=30)
+    seq = A058335()
+    print(seq.generate_data_section())
+    seq.generate_b_file()
     for n, val in seq.enumerate(alert_time=60, quit_on_alert=True):
         print(f"{n} {val}")
