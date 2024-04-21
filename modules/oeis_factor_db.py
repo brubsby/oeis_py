@@ -12,7 +12,8 @@ from lxml import html
 
 import gmpy2
 
-from modules import ecmprobs, expression, factor, prime, ecmtimes, yafu
+from modules import expression, factor, prime, ecmtimes, yafu
+from modules import t_level as tlev
 
 DB_NAME = "oeis_factor.db"
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "db", DB_NAME)
@@ -162,7 +163,7 @@ class OEISFactorDB:
         parsed_data = []
         for line in info_lines:
             t_level = max(
-                ecmprobs.get_t_level([(sci_int(curves), sci_int(b1)) for curves, b1 in re.findall(work_regex, line)]),
+                tlev.get_t_level([(sci_int(curves), sci_int(b1)) for curves, b1 in re.findall(work_regex, line)]),
                 float((lambda x: x.group(1) if x else 0.0)(re.search(t_level_regex, line))))
             associated_sequences = re.findall(sequence_id_regex, line)
             num_digits = (lambda x: int(x.group(1)) if x else None)(re.search(composite_digits_regex, line))

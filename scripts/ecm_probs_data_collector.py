@@ -44,4 +44,4 @@ for c in range(3, 10):
                 b1s.append(val)
 
 for b1 in sorted(b1s):
-    print(get_curve_info(b1, composite, param=0))
+    print(get_curve_info(b1, composite, param=1))

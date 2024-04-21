@@ -9,9 +9,20 @@ def get_url_for_subsequence_query(subsequence):
     return f"https://oeis.org/search?fmt=json&q={','.join(map(str, subsequence))}"
 
 
+def get_url_for_sequence_name_query(name):
+    return f"https://oeis.org/search?fmt=json&q=id:{name}"
+
+
 # query the oeis for a subsequence, as if searching for a sequence in the search bar, and return the json result
 def query_sequences_from_subsequence(subsequence):
     response = requests.get(get_url_for_subsequence_query(subsequence))
+    if not response.ok:
+        raise f"oeis response status code was {response.status_code}"
+    return response.json()['results']
+
+# query the oeis for a subsequence, as if searching for a sequence in the search bar, and return the json result
+def query_sequence_from_name(name):
+    response = requests.get(get_url_for_sequence_name_query(name))
     if not response.ok:
         raise f"oeis response status code was {response.status_code}"
     return response.json()['results']

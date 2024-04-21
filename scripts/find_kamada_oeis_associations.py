@@ -7,17 +7,20 @@ for row in read_prime_difficulty_txt():
     # skip forms with 0 or 1 primes
     if "(" in row['(probable) prime numbers']:
         continue
+    if row['oeis']:
+        continue
     # remove "n=" from list of primes and convert to int list
     subsequence = list(map(int, row['(probable) prime numbers'][2:].split(",")))
-    if len(subsequence) < 4:
+    if len(subsequence) < 3:
         # less than 4 primes found, not worth oeis sequence
         continue
     # calculate number of terms to query with
     # max 10 usually enough for uniqueness
     # -4 to account for oeis not being up-to-date (end terms missing)
     # min 5
-    search_start_term = 2
-    term_to_search_to = max(min(10+search_start_term, len(subsequence) - 4), 5)
+    search_start_term = 0
+
+    term_to_search_to = max(min(10+search_start_term, len(subsequence) - 0), 0)
     if term_to_search_to-search_start_term < 3:
         # if we're only querying 1 or 2 numbers, there will always be too many results
         continue
@@ -37,7 +40,7 @@ for row in read_prime_difficulty_txt():
         while subsequence[0] in [0, 1, 2]:
             subsequence = subsequence[1:]
         if subsequence != oeis_terms:
-            message += f" check disparity {set(subsequence).symmetric_difference(set(oeis_terms))}"
+            message += f" check disparity {list(sorted(list(set(subsequence).symmetric_difference(set(oeis_terms)))))}"
     print(f"{row['wlabel']: <40} "
           f"{message: <40} "
           f"https://oeis.org/search?q={','.join(map(str, search_terms)): <40}"
