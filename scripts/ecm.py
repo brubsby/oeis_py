@@ -1696,7 +1696,7 @@ def run_ecm_resume_job(p95_b1, p95_b2):
                     with open(ecm_resume_finished_file, 'a') as f:
                         f.write(rline + '\n')
                     # append it to our all_finished_lines list...
-                    all_finished_lines.append(rline)
+                    all_finished_lines.add(rline)
                     break
 
     # ################################################
