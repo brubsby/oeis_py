@@ -33,7 +33,8 @@ git clone https://gitlab.inria.fr/zimmerma/ecm.git
 cd ecm
 # comment out check that isn't needed in WSL2
 sed -i -E "s/AC_CHECK_LIB\(\[cuda\], \[cuInit\]/#AC_CHECK_LIB\(\[cuda\], \[cuInit\]/" acinclude.m4
-#todo add dev version install
+# force version to be non-dev, so we get the good kernels
+sed -i "1 s/-dev//" configure.ac
 autoreconf -i
 ./configure --enable-gpu --with-cuda=/usr/local/cuda --with-cgbn-include=~/CGBN/include/cgbn
 make
