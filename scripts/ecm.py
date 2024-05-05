@@ -2315,8 +2315,8 @@ def parse_ecm_options(sargv, new_curves=0, set_args=False, first=False, quiet=Fa
 # ########## Begin execution here ###########
 # ###########################################
 
-str_ver = '0.47'
-str_date = '7th Oct 2023'.rjust(13)
+str_ver = '0.48'
+str_date = '5 May 2024'.rjust(13)
 
 if VERBOSE >= v_normal:
     print('-> ___________________________________________________________________')
