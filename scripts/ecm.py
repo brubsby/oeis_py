@@ -1003,7 +1003,7 @@ def gather_work_done(job_file):
                                 ud[0], ud[1], ud[2], using_threads, '' if (
                                             using_threads == 1) else 's')
                             if use_gpu_stage_1:
-                                using_line = using_line.replace("B2=0", "B2={0:d}".format(int(float(strB2.strip()))) if len(strB2) else "B2={0:d}".format(default_B2(ecm_n, strB1)))
+                                using_line = using_line.replace("B2=0", "B2={0:d}".format(int(float(strB2.strip()))) if len(strB2) else "B2=default")
                             output(using_line)
 
                             # ____________________________________________________________________________
@@ -1566,7 +1566,7 @@ def run_ecm_resume_job(p95_b1, p95_b2):
 
     all_resume_lines = []
     all_resume_lines1 = []
-    all_finished_lines = []
+    all_finished_lines = set()
     all_finished_lines1 = []
 
     num_resume_lines = 0
@@ -2447,16 +2447,19 @@ for ecm_n in number_list:
         if intResume == 0:
             parse_ecm_options(ecm_args.split())
         if use_gpu_stage_1:
-            start_ecm_gpu()
-            ret = monitor_ecm_threads()
+            if intResume != 1:
+                start_ecm_gpu()
+                ret = monitor_ecm_threads()
             # reset expected total time for stage 2
             e_total = -1
+            print("here")
             if not factor_found:
                 gather_work_done(ecm_job)
                 print_work_done()
             if not factor_found:
                 ecm_args = ' -resume ' + residue_file_name + ' ' + ecm_args
                 parse_ecm_options(ecm_args.split())
+            print("here2")
         else:
             start_ecm_cpu_threads()
             ret = monitor_ecm_threads()
