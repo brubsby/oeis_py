@@ -2452,14 +2452,12 @@ for ecm_n in number_list:
                 ret = monitor_ecm_threads()
             # reset expected total time for stage 2
             e_total = -1
-            print("here")
             if not factor_found:
                 gather_work_done(ecm_job)
                 print_work_done()
             if not factor_found:
                 ecm_args = ' -resume ' + residue_file_name + ' ' + ecm_args
                 parse_ecm_options(ecm_args.split())
-            print("here2")
         else:
             start_ecm_cpu_threads()
             ret = monitor_ecm_threads()
