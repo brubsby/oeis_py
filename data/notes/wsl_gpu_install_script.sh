@@ -4,8 +4,34 @@
 
 wsl
 cd ~
+
+# make changes to .bashrc that I like
+# comment out hist commands so they don't ruin our eternal history on startup
+sed -i -E "s/^\s*HIST/# HIST/" ~/.bashrc
+{ cat <<EOF
+export PATH="\$PATH:/usr/local/cuda/bin/"
+export ECM_PATH=~/ecm
+export PATH="\$PATH:/mnt/c/GitProjects/t-level/dist"
+export PYTHONPATH="\$PYTHONPATH:/mnt/c/GitProjects/oeis"
+alias t-level="python3 /mnt/c/GitProjects/t-level/t_level.py"
+shopt -s histappend
+HISTCONTROL=ignoredups:erasedups:ignorespace
+export HISTSIZE=
+export HISTFILESIZE=
+export HISTFILE=~/.bash_eternal_history
+PROMPT_COMMAND="history -a; \$PROMPT_COMMAND"
+EOF
+} >> ~/.bashrc
+source ~/.bashrc
+
 sudo apt-get update
-sudo apt-get install build-essential libtool autoconf libprimesieve-dev libprimesieve libgsl-dev
+sudo apt-get install build-essential libtool autoconf libprimesieve-dev libgsl-dev
+# for ggnfs
+sudo apt-get install g++ m4 zlib1g-dev make p7zip
+# for downloading NFS rels
+sudo apt-get install aria2
+# for lucas.sh
+sudo apt-get install moreutils python-is-python3
 
 # install cuda
 # from https://docs.nvidia.com/cuda/wsl-user-guide/index.html
@@ -13,6 +39,7 @@ sudo apt-key del 7fa2af80
 # from https://developer.nvidia.com/cuda-downloads?target_os=Linux&target_arch=x86_64&Distribution=WSL-Ubuntu&target_version=2.0&target_type=deb_network
 wget https://developer.download.nvidia.com/compute/cuda/repos/wsl-ubuntu/x86_64/cuda-keyring_1.1-1_all.deb
 sudo dpkg -i cuda-keyring_1.1-1_all.deb
+# this maybe necessary on ubuntu 24 https://askubuntu.com/a/1493087
 sudo apt-get update
 sudo apt-get -y install cuda
 rm -rf cuda-keyring_1.1-1_all.deb
@@ -36,7 +63,7 @@ sed -i -E "s/AC_CHECK_LIB\(\[cuda\], \[cuInit\]/#AC_CHECK_LIB\(\[cuda\], \[cuIni
 # force version to be non-dev, so we get the good kernels
 sed -i "1 s/-dev//" configure.ac
 autoreconf -i
-./configure --enable-gpu --with-cuda=/usr/local/cuda --with-cgbn-include=~/CGBN/include/cgbn
+./configure --enable-gpu --with-cuda=/usr/local/cuda --with-cgbn-include=$HOME/CGBN/include/cgbn
 make
 make check
 sudo make install
@@ -67,12 +94,13 @@ make clean
 # which fixes `identifier "CUB_IS_DEVICE_CODE" is undefined`
 sed -i -E 's/INC = -I\"\$\(CUDA_ROOT\)\/include\" -I\./INC = -I\. -I\"\$\(CUDA_ROOT\)\/include\"/' cub/Makefile
 make all VBITS=256 CUDA=89 #ECM=1 NO_ZLIB=1 #maybe need these for yafu?
-# maybe more optimal to change these for your gpu
+# maybe more optimal to change these for specific gpu
 cd ~
 
 # cpu ecm (for yafu)
 git clone https://gitlab.inria.fr/zimmerma/ecm.git
 cd ecm
+make ecm
 
 # ytools (yafu)
 git clone https://github.com/bbuhrow/ytools.git

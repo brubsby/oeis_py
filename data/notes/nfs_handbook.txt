@@ -1,0 +1,143 @@
+NFS can be either GNFS (Generalized Number Field Sieve) or SNFS (Special Number Field Sieve), SNFS can be done for
+numbers of the form k^n+-c, where k and c are small. This can be several different forms of numbers, including but not
+limited to:
+* Numbers of the XYYXF form
+* Fibonacci and Lucas numbers
+* and more...
+
+In general, SNFS polynomial difficulty can be compared to GNFS polynomial difficulty via the relation:
+gnfs_size < 0.56 * snfs_size + 30
+
+One can detect SNFS polynomials with yafu using the command:
+`./yafu "snfs(<composite>,<remaining_cofactor>)" -work 100 -np -testsieve 400`
+(from https://www.mersenneforum.org/showthread.php?t=29626)
+Though at the time of writing, 4/30/2024, it can't create Fibonacci or Lucas SNFS polynomials, or polynomials relating
+to Aurifeuillean factorizations.
+
+
+For non SNFS candidates, poly selection is a bit more difficult. There are several ways you can find a poly, including
+but not limited to:
+
+* GPU Msieve polyselect
+* CADO-NFS CPU distributed polyselect
+* yafu polyfind (supposedly not great, maybe uses msieve?)
+
+
+
+GPU Msieve polyselect
+https://www.mersenneforum.org/showthread.php?t=29630
+
+1. Add worktodo.ini in msieve_nfsathome directory, containing the input number
+nano worktodo.ini
+2. delete old files
+rm msieve.*
+3. run this for a bit, then interrupt
+./msieve -np1
+4. check msieve.log for "max stage 1 norm" and "max stage 2 norm"
+5. run
+./msieve -np "stage1_norm={1/10 to 1/2 of max stage 1 norm} stage2_norm={3 orders of magnitude less than stage 1 norm} min_coeff={best e score found so far}"
+6. tune this around to make sure GPU has high usage
+7. run this in another window in the msieve_nfsathome dir to check highest score found:
+watch "grep '^#' msieve.dat.p | LANG=C sort -rgk7 | uniq | head -n1 | xargs -I {} grep -A9 -m1 {} msieve.dat.p"
+8. compare with current best score for composite size here:
+https://www.mersenneforum.org/showthread.php?t=20933&page=21
+9. report high score if you got one
+10. once satisfied, go to cownoise and check that you can't improve the skew
+http://cownoise.com/ -> calculators -> optimal skew
+11. make a testPoly file with the result
+grep '^#' msieve.dat.p | LANG=C sort -rgk7 | uniq | head -n1 | xargs -I {} grep -A9 -m1 {} msieve.dat.p > ~/gnfs-lasieve-bb/testPoly
+cd ~/gnfs-lasieve-bb
+12. copy parameterization from previous jobs of the same size:
+https://www.mersenneforum.org/showthread.php?t=29140
+13. test sieve using this script
+qint=1000; seq 15 5 90 | parallel -k "rm -f testRels{} ; ./gnfs-lasieve4I14e -f {}000000 -c $qint -a -o testRels{} testPoly 2>&1" | awk -F'[()=, ]' 'NR==1{startq=int($6/1000000)*1000000; print "q0 yield estsum sec/rel avg_sec/rel\n"} NR>1 {nextq=int($6/1000000)*1000000; qdiff=nextq-q; total_rels+=qdiff*rels/'"$qint"'; total_sec_rel+=sec_rel*qdiff; avg_sec_rel=total_sec_rel/(nextq-startq); printf "%dM %d %.01fM %.05f %.05f\n", int(q/1000000), rels, total_rels/1000000, sec_rel, avg_sec_rel} {rels=$3; sec_rel=$8; q=int($6/1000000)*1000000;}' | column -t ; tput bel
+
+
+
+#CADO target_density and MSieve target_density are slightly different:
+#" CADO's density is 50-60 higher than msieve, e.g. msieve TD=100 is about the same as CADO TD=155."
+
+
+## Msieve GPU LA:
+# NFS@Home:
+1. prep NFS@Home variables with:
+nfs_user=<username>; nfs_password=<password>; compositename="OEIS_A060881_80";
+cd ~/msieve_nfsathome; mkdir $compositename; cd $compositename
+2. download files (picking up where we left off, if there's more), and run duplicate removal:
+ printf "%s\n" .fb .ini .poly .projection .dat.gz | xargs -I {} aria2c --http-user=$nfs_user --http-passwd=$nfs_password --continue https://escatter11.fullerton.edu/nfs_data/$compositename/$compositename{}; zcat $compositename.dat.gz | remdups4 $(($(stat --printf="%s" $compositename.dat.gz)/12503137)) > $compositename.unique.dat;
+3. run LA:
+cd ~/msieve_nfsathome
+./msieve -v -t 16 -g 0 -i ./$compositename/$compositename.ini -l ./$compositename/$compositename.log -s ./$compositename/$compositename.unique.dat -nf ./$compositename/$compositename.fb -nc target_density=100
+4. get more rels with command 2 after a while if we didn't have enough
+5. increase target_density by 6 or so until we get a job that will be fast
+
+
+## CADO-NFS:
+1. start server with:
+python3 cado-nfs.py -t 16 -w "$HOME/cado-nfs/C142" <number> server.whitelist=0.0.0.0/0 server.port=9999 server.ssl=no
+2. start clients with, http if no ssl, https if ssl
+python3 cado-nfs-client.py --server=http://<host>:9999
+
+
+## CADO-NFS into GPU MSieve LA: https://www.mersenneforum.org/showpost.php?p=655467&postcount=15
+# 1. sometimes CADO has an error during LA, so running LA on Msieve GPU works better (and also it's just faster)
+# 2. copy the *.poly file to edit it:
+rm ~/msieve_nfsathome/msieve.*
+cp c*.poly ~/msieve_nfsathome/msieve.fb
+N=$(cat ~/msieve_nfsathome/msieve.fb | grep -oP '(?<=n: )(\d+)')
+# 3. Edit msieve.fb in the following manner:
+nano ~/msieve_nfsathome/msieve.fb
+# - a. remove all lines that begin with "#"
+# - b. change "n:" to "N"
+# - c. change "skew:" to "SKEW"
+# - d. remove all ":" after "c#" and "Y#"
+# - e. change all "c#" to "A#"
+# - f. change both "Y#" to "R#"
+# - g. remember to save the msieve.fb file after editing
+# 4. make worktodo.ini
+echo $N > ~/msieve_nfsathome/worktodo.ini
+# 5. combine .gz files:
+cd *.upload; for f in *.gz;do zcat $f >> ~/msieve_nfsathome/msieve.dat;done;
+# 6. run LA
+cd ~/msieve_nfsathome/; ./msieve -v -g 0 -t 16 -nc target_density=90
+
+
+## CADO-NFS SNFS:
+# generate the poly with yafu or the pari/gp code in generalized_lucas_snfs_poly.txt
+cd ~/cado-nfs; k=986; composite_name="v2.-1.$k"; equivalent_digits=135;
+polyfile=c$equivalent_digits.poly; paramfile=params.c$equivalent_digits
+mkdir -p $composite_name
+nano ~/cado-nfs/$composite_name/$polyfile
+# paste the poly in and save
+
+# edit the params for snfs:
+cp ~/cado-nfs/parameters/factor/$paramfile ~/cado-nfs/$composite_name/
+N=$(cat ~/cado-nfs/$composite_name/$polyfile | grep -oP '(?<=n: )(\d+)')
+sed -i -E "s/^#.*//" ~/cado-nfs/$composite_name/$paramfile
+sed -i -E "s/^name = c$equivalent_digits/name = $composite_name\nN = $N/" ~/cado-nfs/$composite_name/$paramfile
+sed -i -E "s/^tasks\.polyselect\..*//" ~/cado-nfs/$composite_name/$paramfile
+sed -i -E "s/.*sqside.*//" ~/cado-nfs/$composite_name/$paramfile
+# swap sieve param sides
+sed -i -E "s/(lim|lpb|mfb|lambda|ncurves)0/\12/" ~/cado-nfs/$composite_name/$paramfile
+sed -i -E "s/(lim|lpb|mfb|lambda|ncurves)1/\10/" ~/cado-nfs/$composite_name/$paramfile
+sed -i -E "s/(lim|lpb|mfb|lambda|ncurves)2/\11/" ~/cado-nfs/$composite_name/$paramfile
+# remove multiple contiguous newlines
+sed -i -e '/./b' -e :n -e 'N;s/\n$//;tn' ~/cado-nfs/$composite_name/$paramfile
+printf "
+
+tasks.polyselect.admin = 0
+tasks.polyselect.admax = 0
+tasks.polyselect.adrange = 0
+tasks.polyselect.import = $composite_name/$polyfile
+
+tasks.sieve.sqside = 0
+" >> ~/cado-nfs/$composite_name/$paramfile
+cd ~/cado-nfs
+python3 cado-nfs.py -t 16 -w "$HOME/cado-nfs/$composite_name" $composite_name/$paramfile server.whitelist=0.0.0.0/0 server.port=9999 server.ssl=no slaves.hostnames=localhost slaves.scriptpath=$HOME/cado-nfs/build/$(hostname) --slaves 8
+
+
+
+
+
+## See Also:
+# https://gilchrist.great-site.net/jeff/factoring/nfs_beginners_guide.html?i=2

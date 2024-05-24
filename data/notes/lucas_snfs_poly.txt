@@ -1,0 +1,156 @@
+\\ https://www.mersenneforum.org/showthread.php?t=23895
+
+{
+        lucas2(k,P,Q,     n,s,j,Ql,Qh,Uh,Vl,Vh) =
+        n = floor(log(k)/log(2)) + 1;
+        s = 0;
+        while( bittest(k,s) == 0, s = s + 1 );
+        Uh = 1; Vl = 2; Vh = P;
+        Ql = 1; Qh = 1;
+        forstep( j = n-1, s+1, -1,
+                Ql = Ql * Qh;
+                if( bittest(k,j),
+                        Qh = Ql * Q;
+                        Uh = Uh * Vh;
+                        Vl = Vh * Vl - P * Ql;
+                        Vh = Vh * Vh - 2 * Qh,
+
+                        Uh = Uh * Vl - Ql;
+                        Vh = Vh * Vl - P * Ql;
+                        Vl = Vl * Vl - 2 * Ql;
+                        Qh = Ql;
+                );
+        );
+        Ql = Ql * Qh; Qh = Ql * Q;
+        Uh = Uh * Vl - Ql;
+        Vl = Vh * Vl - P * Ql;
+        Ql = Ql * Qh;
+        for( j = 1, s,
+                Uh = Uh * Vl;
+                Vl = Vl * Vl - 2 * Ql;
+                Ql = Ql * Ql;
+        );
+        [Uh,Vl]
+}
+U(p,q,n)=lucas2(n,p,q)[1];
+V(p,q,n)=lucas2(n,p,q)[2];
+
+plindep(N,d,x,y) = {
+    result = if (d == 4, lindep([N,x^4,x^3*y,x^2*y^2,x*y^3,y^4]),
+                 d == 5, lindep([N,x^5,x^4*y,x^3*y^2,x^2*y^3,x*y^4,y^5]),
+                 d == 6, lindep([N,x^6,x^5*y,x^4*y^2,x^3*y^3,x^2*y^4,x*y^5,y^6]),
+                 d == 7, lindep([N,x^7,x^6*y,x^5*y^2,x^4*y^3,x^3*y^4,x^2*y^5,x*y^6,y^7]),
+                 d == 8, lindep([N,x^8,x^7*y,x^6*y^2,x^5*y^3,x^4*y^4,x^3*y^5,x^2*y^6,x*y^7,y^8]),
+                 );
+    polygcd = content(result[2..#result]);
+    printpoly((abs(result[1]*N)\polygcd), d, x, y, result\polygcd);
+
+    []
+}
+
+printpoly(N,d,x,y,result) = {
+    snfs_difficulty = #digits(N);
+    gnfs_difficulty = #digits(N)*.56+30;
+    printf("# SNFS difficulty: %d\n# GNFS equivalent: %.01f\n", snfs_difficulty, gnfs_difficulty);
+    printf("# 4/13 pretest: t%.02f\n", gnfs_difficulty*4/13);
+    printf("#  1/3 pretest: t%.02f\n", gnfs_difficulty/3);
+    printf("type: snfs\nn: %d\nskew: %.02f\n", N, (abs(result[2])/abs(result[d+2]))^(1/d));
+    for (i = 2, d+2, printf("c%d: %d\n", i-2, result[i]));
+    printf("Y0: %d\nY1: %d\n", -y, x)
+}
+
+jiggle(apol, rpol) = {
+
+}
+
+\\ k subst:
+apol=Vecrev(result[2..#result]);apol=apol\content(apol);apolk=Vec(subst(Pol(apol,z),z,z+1));apolk\content(apolk)
+
+
+\\ if k is prime or N is composite with no small divisors, divide by the order of the polynomial you're trying to find
+\\ calculate target SNFS composite N
+k = 541
+p = 2
+q = -1
+\\ find small factors:
+factors = 1
+\\ divide out the small factors (not sure what counts as small)
+N = V(p,q,k)\factors
+
+\\ x and y are straddling our composite, divided by the order of the symmetric xy polynomial we're searching?
+d = 6
+x = U(p,q,k\d+1)
+y = U(p,q,k\d)
+result = plindep(N,d,x,y)
+\\
+\\ = [1, -41, -102, -105, -60, -15, -6, 1]~
+\\ which gives poly:
+\\
+\\ n: {N}
+\\ skew: {(result[2]/result[8])^(1/d)}
+\\ c6: {result[8]}
+\\ c5: {result[7]}
+\\ c4: {result[6]}
+\\ c3: {result[5]}
+\\ c2: {result[4]}
+\\ c1: {result[3]}
+\\ c0: {result[2]}
+\\ Y1: {x}
+\\ Y0: {-y}
+
+
+\\hCPells: CPell(4k+2)=2*(2*Pell(2k+1)+1)*(2*Pell(2k+1)-1)
+n = 986
+p = 2
+q = -1
+d = 6
+k = (n-2)\4
+n_h = 2*k+1
+N = 2*U(p,q,n_h)+1 \\ +-1 for the other hCPell
+x = U(p,q,n_h\d+1)
+y = U(p,q,n_h\d)
+result = plindep(N,d,x,y)
+
+
+
+
+
+\\ for generalized lucas numbers with composite index:
+\\Originally Posted by charybdis
+\\The rules for these numbers are essentially the same as those for Cunninghams:
+\\
+\\Index divisible by 3 -> poly of any even degree
+\\Index divisible by 5 -> quartic (or octic, but that's only useful for difficulties above 260)
+\\Index divisible by 7 -> sextic
+\\Index divisible by 11 -> quintic
+\\Index divisible by 13 -> sextic
+\\Index divisible by 3 and 5 -> quartic (or octic for difficulties above 260)
+\\Index divisible by 3 and 7 -> sextic
+\\
+\\There is the slightly easier sextic for an index divisible by 9 which I don't think has a direct Cunningham parallel; 2LM and 6LM are similar, but then there is no sextic for indices divisible by 3 but not 9.
+\\
+\\All other combinations of factors do not yield viable SNFS polynomials. For example, divisibility by 17 gives an octic but this will sieve slower than the sextic you get without dividing out the factor. Divisibility by 3 and 11 gives a degree 10 polynomial which is hopeless.
+
+k = 625
+p = 2
+q = -1
+f = factor(k);
+o = if(#f == 1, f[1,1], f[1,1] == 2, f[2,1], f[1,1])
+N = V(p,q,k)\V(p,q,k\o)
+d = 6
+x = V(p,q,(o-1)*k\o\d+1)
+y = V(p,q,(o-1)*k\o\d)
+result = plindep(N,d,x,y)
+
+
+\\ divisible by 9 case
+k = 747
+p = 2
+q = -1
+f = factor(k);
+o = 9
+N = V(p,q,k)\V(p,q,k\3)
+d = 6
+x = 1
+y = V(p,q,k\o)
+result = plindep(N,d,x,y)
