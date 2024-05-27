@@ -1,5 +1,41 @@
 \\ https://www.mersenneforum.org/showthread.php?t=23895
 
+
+\\ Credit to Charles Greathouse for the DickmanRho implementation
+rhoTable = [1, 3.068528194e-1, 4.860838829e-2, 4.910925648e-3, 3.547247005e-4, 1.964969635e-5, 8.745669953e-7, 3.232069304e-8, 1.016248283e-9, 2.770171838e-11, 6.644809070e-13, 1.419713165e-14, 2.729189030e-16, 4.760639989e-18, 7.589908004e-20];
+DickmanRho(x)={
+	local(left, right, scale);
+	if (x <= 2, return (1 - log(max(x, 1))));
+	if (x <= 3, return(
+		1 - (1 - log(x - 1))*log(x) + real(dilog(1 - x)) + Pi^2 / 12
+	));
+
+	\\ Asymptotic estimate (scaled for continuity)
+	if (x > #rhoTable,
+		scale = rhoTable[#rhoTable] / rhoest(#rhoTable);
+
+		\\ Let the scale factor dwindle away, since the estimate is (presumably)
+		\\ better in the long run than any scaled version of it.  The exponent
+		\\ of 0.25 has been chosen to give the best results for 10 < x < 100
+		\\ with a table size of 10.
+		scale = (scale - 1) * (#rhoTable / x)^.25 + 1;
+		return (precision(rhoest(x) * scale, 9))
+	);
+
+	\\ Scaling factors: the factor by which the true value of rho differs from
+	\\ the estimates at the endpoints.
+	left = rhoTable[floor(x)] / rhoest(floor(x));
+	right = rhoTable[ceil(x)] / rhoest(ceil(x));
+
+	\\ Linear interpolation on the scale factors.
+	scale = left + (right - left) * (x - floor(x));
+
+	\\ Return a result based on the scale factor and the asymptotic formula.
+	precision(rhoest(x) * scale, 9)
+};
+addhelp(DickmanRho, "Estimates the value of the Dickman rho function. For x <= 3 the exact values are used, up to rounding; up to "#rhoTable" the value is interpolated using known values and rhoest; after "#rhoTable" rhoest is used, along with a correction factor based on the last value in rhoTable.");
+
+\\ lucas2.gp
 {
         lucas2(k,P,Q,     n,s,j,Ql,Qh,Uh,Vl,Vh) =
         n = floor(log(k)/log(2)) + 1;
@@ -35,85 +71,171 @@
 U(p,q,n)=lucas2(n,p,q)[1];
 V(p,q,n)=lucas2(n,p,q)[2];
 
+
+sympoly(d) = {
+   pret=Vec(0,d+1);
+   for(i=0,d,pret[i+1]='y^i*'x^(d-i));
+   pret
+}
+
 plindep(N,d,x,y) = {
-    result = if (d == 4, lindep([N,x^4,x^3*y,x^2*y^2,x*y^3,y^4]),
-                 d == 5, lindep([N,x^5,x^4*y,x^3*y^2,x^2*y^3,x*y^4,y^5]),
-                 d == 6, lindep([N,x^6,x^5*y,x^4*y^2,x^3*y^3,x^2*y^4,x*y^5,y^6]),
-                 d == 7, lindep([N,x^7,x^6*y,x^5*y^2,x^4*y^3,x^3*y^4,x^2*y^5,x*y^6,y^7]),
-                 d == 8, lindep([N,x^8,x^7*y,x^6*y^2,x^5*y^3,x^4*y^4,x^3*y^5,x^2*y^6,x*y^7,y^8]),
-                 );
+    result = lindep(subst(subst(concat(N, sympoly(d)), 'x, x), 'y, y));
     polygcd = content(result[2..#result]);
-    printpoly((abs(result[1]*N)\polygcd), d, x, y, result\polygcd);
-
-    []
+    apol = Polrev(result[2..#result]\polygcd);
+    rpol = -y+x*'x;
+    [apol, rpol]
 }
 
-printpoly(N,d,x,y,result) = {
-    snfs_difficulty = #digits(N);
-    gnfs_difficulty = #digits(N)*.56+30;
-    printf("# SNFS difficulty: %d\n# GNFS equivalent: %.01f\n", snfs_difficulty, gnfs_difficulty);
-    printf("# 4/13 pretest: t%.02f\n", gnfs_difficulty*4/13);
-    printf("#  1/3 pretest: t%.02f\n", gnfs_difficulty/3);
-    printf("type: snfs\nn: %d\nskew: %.02f\n", N, (abs(result[2])/abs(result[d+2]))^(1/d));
-    for (i = 2, d+2, printf("c%d: %d\n", i-2, result[i]));
-    printf("Y0: %d\nY1: %d\n", -y, x)
+printpoly(N,pols,comment) = {
+    if(poldegree(pols[1]) > 3,
+        my(x=-polcoef(pols[2],0)/polcoef(pols[2],1));
+        snfs_difficulty = real(log(polcoef(pols[2],1)^poldegree(pols[1])*eval(pols[1]))/log(10));
+        gnfs_difficulty = snfs_difficulty*.56+30;
+        d = poldegree(pols[1]);
+        skew = (abs(polcoef(pols[1],0))/abs(polcoef(pols[1],d)))^(1/d);
+        if(comment, printf("# %s\n", comment));
+        printf("# Sumcoef algebraic side: %d\n", polyscore(pols));
+        printf("# SNFS difficulty: %.01f\n# GNFS equivalent: %.01f\n", snfs_difficulty, gnfs_difficulty);
+        printf("# 4/13 pretest: t%.02f\n", gnfs_difficulty*4/13);
+        printf("#  1/3 pretest: t%.02f\n", gnfs_difficulty/3);
+        printf("type: snfs\nn: %d\nskew: %.02f\n", N, skew);
+        for (i = 0, d, if(polcoef(pols[1],i) != 0, printf("c%d: %d\n", i, polcoef(pols[1],i))));
+        printf("Y0: %d\nY1: %d\n\n", polcoef(pols[2],0), polcoef(pols[2],1));
+    )
 }
 
-jiggle(apol, rpol) = {
-
+\\ busby's e-score lol (i.e. TODO implement murphy e score)
+polyscore(pols) = {
+    vecsum(abs(Vec(pols[1])))
 }
 
-\\ k subst:
-apol=Vecrev(result[2..#result]);apol=apol\content(apol);apolk=Vec(subst(Pol(apol,z),z,z+1));apolk\content(apolk)
+invert(pols) = {
+     [Polrev(Vec(pols[1])), Polrev(Vec(pols[2]))]
+}
+
+subxk(pols, k) = {
+    \\ reduce by gcd if not done already
+    apol = pols[1];
+    rpol = pols[2];
+    apolvec = Vec(apol);
+    rpolvec = Vec(rpol);
+    apolvec = apolvec\content(apolvec);
+    rpolvec = rpolvec\content(rpolvec);
+    \\ substitute k
+    apolkvec = Vec(subst(Pol(apolvec,'x),'x,'x+k));
+    rpolkvec = Vec(subst(Pol(rpolvec,'x),'x,'x+k));
+    \\reduce again if necessary
+    apolkvec = apolkvec\content(apolkvec);
+    rpolkvec = rpolkvec\content(rpolkvec);
+    apolk = Pol(apolkvec, 'x);
+    rpolk = Pol(rpolkvec, 'x);
+    [apolk, rpolk]
+}
+
+jiggle(N, pols, comment) = {
+    best_score = polyscore(pols);
+    invpols = invert(pols);
+    for(i=1,5,
+        jiggled = subxk(pols, i);
+        jscore = polyscore(jiggled);
+        if(jscore < best_score + 10, printpoly(N, jiggled); best_score = jscore);
+        jiggled = subxk(invpols, i);
+        jscore = polyscore(jiggled);
+        if(jscore < best_score + 10, printpoly(N, jiggled); best_score = jscore);
+        jiggled = subxk(pols, -i);
+        jscore = polyscore(jiggled);
+        if(jscore < best_score + 10, printpoly(N, jiggled); best_score = jscore);
+        jiggled = subxk(invpols, -i);
+        jscore = polyscore(jiggled);
+        if(jscore < best_score + 10, printpoly(N, jiggled); best_score = jscore);
+    );
+}
+
+\\public api, implemented first for V case, will have to adjust for U case
+\\ TODO add hcpell case
+polyfindv(p,q,k,composite) = {
+    isu = 0;
+    seqf = if(isu, U, V);
+    parentN = seqf(p,q,k);
+    has3 = k % 3 == 0;
+    has5 = k % 5 == 0;
+    has7 = k % 7 == 0;
+    has11 = k % 11 == 0;
+    has13 = k % 13 == 0;
+    has9 = k % 9 == 0;
+    paramsvec = List();
+    if(has9,
+           o = 9;
+            y1 = 1;
+            y0 = -seqf(p,q,k\o); \\works in V(k\9); \\ cpells
+            N = seqf(p,q,k)\seqf(p,q,k\3);
+            d = 6; \\ cpells have a d6 poly for n%9==0
+            paramsvec = concat(paramsvec, [N, d, y1, y0, "9 divisibility case"]));
+    if(has3 && has5,
+            o = 15;
+            N = seqf(p,q,k)*seqf(p,q,k\o)\(seqf(p,q,k\3)*seqf(p,q,k\5));
+            d = 4;
+            y1 = 1;
+            y0 = seqf(p,q,2*k\o);
+            paramsvec = concat(paramsvec, [N, d, y1, y0, "15 divisibility case"]);
+            d = 8;
+            y1 = 1;
+            y0 = seqf(p,q,2*k\o); \\ TODO double check this works, probably needs a different constant
+            paramsvec = concat(paramsvec, [N, d, y1, y0, "15 divisibility case"]));
+    if(has3 && has7,
+            o = 21;
+            N = seqf(p,q,k)*seqf(p,q,k\o)\(seqf(p,q,k\3)*seqf(p,q,k\7));
+            d = 6;
+            y1 = 1;
+            y0 = seqf(p,q,2*k\o);
+            paramsvec = concat(paramsvec, [N, d, y1, y0, "21 divisibility case"]));
+    if(has3 || has5 || has7 || has11 || has 13, \\ other simple divisibilities
+            f = factor(k,13);
+            ovec = [];
+            if(has3, ovec = concat(ovec, 3),
+               has5, ovec = concat(ovec, 5),
+               has7, ovec = concat(ovec, 7),
+               has11, ovec = concat(ovec, 11),
+               has13, ovec = concat(ovec, 13));
+            for( j = 1, #ovec, o = ovec[j];
+                               N = seqf(p,q,k)\seqf(p,q,k\o);
+                               d = eulerphi(o);
+                               dvec = if(eulerphi(o)==2, [4,6,8], [d]);
+                               for(i = 1, #dvec, d = dvec[i];
+                                   paramsvec = concat(paramsvec, [N, d, seqf(p,q,(o-1)*k\o\d+1), seqf(p,q,(o-1)*k\o\d), strprintf("%d divisibility case", o)]);
+                                   paramsvec = concat(paramsvec, [N, d, seqf(p,q,(o-1)*k\o\d+1), seqf(p,q,(o-1)*k\o\d-1), strprintf("%d divisibility case", o)]);
+                                   paramsvec = concat(paramsvec, [N, d, 1, V(p,q,k\o), strprintf("%d divisibility case", o)]))));
+
+    if(1, \\ prime or composite with no small factors case
+            N = V(p,q,k);
+            \\ find small factors:
+            factors = factor(N,10^5); \\ TODO might need adjusting
+            div = 1;
+            for(i = 1, #factors[,1]-1, div=div * vecprod(factors[i,]));
+            N = seqf(p,q,k)\div;
+            d = 6;
+            y1 = U(p,q,k\d+1); \\ for some reason U works better always \\ TODO confirm this
+            y0 = U(p,q,k\d);
+            paramsvec = concat(paramsvec, [N, d, y1, y0, "default case"]);
+            y1 = U(p,q,k\d+1);
+            y0 = U(p,q,k\d-1);
+            paramsvec = concat(paramsvec, [N, d, y1, y0, "default case"]);
+            \\ TODO add other y1 y0?
+    );
+
+    for (i = 1, #paramsvec, params = paramsvec[i];
+                            N = params[1];
+                            d = params[2];
+                            y1 = params[3];
+                            y0 = params[4];
+                            comment = params[5];
+                            result = plindep(N, d, y1, y0);
+                            printpoly(N, result, comment);
+                            jiggle(N, result, comment););
+}
 
 
-\\ if k is prime or N is composite with no small divisors, divide by the order of the polynomial you're trying to find
-\\ calculate target SNFS composite N
-k = 541
-p = 2
-q = -1
-\\ find small factors:
-factors = 1
-\\ divide out the small factors (not sure what counts as small)
-N = V(p,q,k)\factors
-
-\\ x and y are straddling our composite, divided by the order of the symmetric xy polynomial we're searching?
-d = 6
-x = U(p,q,k\d+1)
-y = U(p,q,k\d)
-result = plindep(N,d,x,y)
-\\
-\\ = [1, -41, -102, -105, -60, -15, -6, 1]~
-\\ which gives poly:
-\\
-\\ n: {N}
-\\ skew: {(result[2]/result[8])^(1/d)}
-\\ c6: {result[8]}
-\\ c5: {result[7]}
-\\ c4: {result[6]}
-\\ c3: {result[5]}
-\\ c2: {result[4]}
-\\ c1: {result[3]}
-\\ c0: {result[2]}
-\\ Y1: {x}
-\\ Y0: {-y}
-
-
-\\hCPells: CPell(4k+2)=2*(2*Pell(2k+1)+1)*(2*Pell(2k+1)-1)
-n = 986
-p = 2
-q = -1
-d = 6
-k = (n-2)\4
-n_h = 2*k+1
-N = 2*U(p,q,n_h)+1 \\ +-1 for the other hCPell
-x = U(p,q,n_h\d+1)
-y = U(p,q,n_h\d)
-result = plindep(N,d,x,y)
-
-
-
-
+\\Regarding poly selection for indices divisible by 3: for CPell(3n)/CPell(n), you can use the usual lindep method, but as the number is similar in size to CPell(2n) you should pick Y0 and Y1 accordingly. Only even degrees will be possible.
 
 \\ for generalized lucas numbers with composite index:
 \\Originally Posted by charybdis
@@ -131,26 +253,111 @@ result = plindep(N,d,x,y)
 \\
 \\All other combinations of factors do not yield viable SNFS polynomials. For example, divisibility by 17 gives an octic but this will sieve slower than the sextic you get without dividing out the factor. Divisibility by 3 and 11 gives a degree 10 polynomial which is hopeless.
 
-k = 625
+k = 665
 p = 2
 q = -1
-f = factor(k);
+f = factor(k,13);
 o = if(#f == 1, f[1,1], f[1,1] == 2, f[2,1], f[1,1])
 N = V(p,q,k)\V(p,q,k\o)
-d = 6
+d = eulerphi(o)
+d = if(d==2, 6, d)
 x = V(p,q,(o-1)*k\o\d+1)
 y = V(p,q,(o-1)*k\o\d)
 result = plindep(N,d,x,y)
+printpoly(N, result)
+jiggle(N, result)
+x = 1
+y = V(p,q,k\o)
+result = plindep(N,d,x,y)
+printpoly(N, result)
+jiggle(N, result)
+x = U(p,q,(o-1)*k\o\d+1)
+y = U(p,q,(o-1)*k\o\d)
+result = plindep(N,d,x,y)
+printpoly(N, result)
+jiggle(N, result)
 
 
-\\ divisible by 9 case
+\\ For indices divisible by 9, CPell(9n)/CPell(3n) has a sextic poly in CPell(n), i.e. Y1 = 1, Y0 = -CPell(n).
 k = 747
 p = 2
 q = -1
-f = factor(k);
 o = 9
 N = V(p,q,k)\V(p,q,k\3)
 d = 6
 x = 1
 y = V(p,q,k\o)
 result = plindep(N,d,x,y)
+
+\\ For indices divisible by 25, CPell(25n)/CPell(5n) has a ? poly in CPell(?n), i.e. Y1 = 1, Y0 = -CPell(?n).
+k = 800
+p = 2
+q = -1
+o = 25
+N = V(p,q,k)\V(p,q,k\5)
+d = 6
+x = 1
+y = V(p,q,k\o)
+result = plindep(N,d,x,y)
+
+
+\\ For indices divisible by 15, CPell(15n)*CPell(n)/(CPell(5n)*CPell(3n)) has a quartic poly in CPell(2n).
+k = 915
+p = 2
+q = -1
+o = 15
+N = V(p,q,k)*V(p,q,k\15)\(V(p,q,k\3)*V(p,q,k\5))
+d = 4
+x = 1
+y = V(p,q,2*k\o)
+result = plindep(N,d,x,y)
+printpoly(N, result)
+jiggle(N, result)
+
+\\ if k is prime or N is composite with no small divisors, divide by the order of the polynomial you're trying to find
+\\ calculate target SNFS composite N
+k = 866
+p = 2
+q = -1
+\\ divide out the small factors (not sure what counts as small)
+N = V(p,q,k);
+\\ find small factors:
+factors = factor(N,10^5)
+div = 1
+for(i = 1, #factors[,1]-1, div=div * vecprod(factors[i,]))
+N = V(p,q,k)\div;
+d = 6
+x = U(p,q,k\d+1)
+y = U(p,q,k\d)
+result = plindep(N,d,x,y)
+
+
+\\hCPells: CPell(4k+2)=2*(2*Pell(2k+1)+1)*(2*Pell(2k+1)-1)
+n = 665
+p = 2
+q = -1
+d = 6
+k = (n-2)\4
+n_h = 2*k+1
+N = 2*U(p,q,n_h)+1 \\ +-1 for the other hCPell
+x = U(p,q,n_h\d+1)
+y = U(p,q,n_h\d)
+result = plindep(N,d,x,y)
+printpoly(N, result)
+jiggle(N, result)
+
+\\
+\\ = [1, -41, -102, -105, -60, -15, -6, 1]~
+\\ which gives poly:
+\\
+\\ n: {N}
+\\ skew: {(result[2]/result[8])^(1/d)}
+\\ c6: {result[8]}
+\\ c5: {result[7]}
+\\ c4: {result[6]}
+\\ c3: {result[5]}
+\\ c2: {result[4]}
+\\ c1: {result[3]}
+\\ c0: {result[2]}
+\\ Y1: {x}
+\\ Y0: {-y}
