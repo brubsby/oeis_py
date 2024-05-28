@@ -1,39 +1,66 @@
 \\ https://www.mersenneforum.org/showthread.php?t=23895
 
+assert(predicate,err)=if(!cond,error(err));
 
-\\ Credit to Charles Greathouse for the DickmanRho implementation
-rhoTable = [1, 3.068528194e-1, 4.860838829e-2, 4.910925648e-3, 3.547247005e-4, 1.964969635e-5, 8.745669953e-7, 3.232069304e-8, 1.016248283e-9, 2.770171838e-11, 6.644809070e-13, 1.419713165e-14, 2.729189030e-16, 4.760639989e-18, 7.589908004e-20];
-DickmanRho(x)={
-	local(left, right, scale);
-	if (x <= 2, return (1 - log(max(x, 1))));
-	if (x <= 3, return(
-		1 - (1 - log(x - 1))*log(x) + real(dilog(1 - x)) + Pi^2 / 12
-	));
+\\ Credit to Charles Greathouse for the dickmanrho implementation
 
-	\\ Asymptotic estimate (scaled for continuity)
-	if (x > #rhoTable,
-		scale = rhoTable[#rhoTable] / rhoest(#rhoTable);
+eps() = 10^(-5); \\ precision
 
-		\\ Let the scale factor dwindle away, since the estimate is (presumably)
-		\\ better in the long run than any scaled version of it.  The exponent
-		\\ of 0.25 has been chosen to give the best results for 10 < x < 100
-		\\ with a table size of 10.
-		scale = (scale - 1) * (#rhoTable / x)^.25 + 1;
-		return (precision(rhoest(x) * scale, 9))
-	);
+deBruijnXi(x)={
+    my(left, right, m);
+    if (x < 1, error ("deBruijnXi: Can't find a xi given x < 1."));
+    if (x > 1, left = log(x), left = eps());
+    right = 1.35 * log(x) + 1; \\ Heuristic
 
-	\\ Scaling factors: the factor by which the true value of rho differs from
-	\\ the estimates at the endpoints.
-	left = rhoTable[floor(x)] / rhoest(floor(x));
-	right = rhoTable[ceil(x)] / rhoest(ceil(x));
-
-	\\ Linear interpolation on the scale factors.
-	scale = left + (right - left) * (x - floor(x));
-
-	\\ Return a result based on the scale factor and the asymptotic formula.
-	precision(rhoest(x) * scale, 9)
+    \\Bisection
+    while (right - left > left * eps(),
+        m = (left + right) / 2;
+        if (exp(m) - 1 > x * m, right = m, left = m)
+    );
+    (left + right) / 2
 };
-addhelp(DickmanRho, "Estimates the value of the Dickman rho function. For x <= 3 the exact values are used, up to rounding; up to "#rhoTable" the value is interpolated using known values and rhoest; after "#rhoTable" rhoest is used, along with a correction factor based on the last value in rhoTable.");
+addhelp(deBruijnXi, "deBruijnXi(x): Helper function for rhoest.  Finds a xi such that e^xi - 1 = x * xi.");
+
+rhoest(x)={
+    my(xi = deBruijnXi(x));
+    \\exp(Euler) / sqrt(2 * Pi * x) * exp(1 - exp(xi) + intnum(s = eps(), xi, (exp(s) - 1) / s))
+    exp(-eint1(-xi) - x * xi) / sqrt(2 * Pi * x) / xi
+};
+addhelp(rhoest, "de Bruijn's asymptotic approximation for rho(x), rewritten as in van de Lune and Wattel 1969.  Curiously, their paper shows values for this estimate that differ from those calculated by this function, often as soon as the second decimal place -- but as the difference is in the direction of the true value, I have not looked further into this.");
+
+
+rhoTable = [1, 3.068528194e-1, 4.860838829e-2, 4.910925648e-3, 3.547247005e-4, 1.964969635e-5, 8.745669953e-7, 3.232069304e-8, 1.016248283e-9, 2.770171838e-11, 6.644809070e-13, 1.419713165e-14, 2.729189030e-16, 4.760639989e-18, 7.589908004e-20];
+dickmanrho(x)={
+    local(left, right, scale);
+    if (x <= 2, return (1 - log(max(x, 1))));
+    if (x <= 3, return(
+        1 - (1 - log(x - 1))*log(x) + real(dilog(1 - x)) + Pi^2 / 12
+    ));
+
+    \\ Asymptotic estimate (scaled for continuity)
+    if (x > #rhoTable,
+        scale = rhoTable[#rhoTable] / rhoest(#rhoTable);
+
+        \\ Let the scale factor dwindle away, since the estimate is (presumably)
+        \\ better in the long run than any scaled version of it.  The exponent
+        \\ of 0.25 has been chosen to give the best results for 10 < x < 100
+        \\ with a table size of 10.
+        scale = (scale - 1) * (#rhoTable / x)^.25 + 1;
+        return (precision(rhoest(x) * scale, 9))
+    );
+
+    \\ Scaling factors: the factor by which the true value of rho differs from
+    \\ the estimates at the endpoints.
+    left = rhoTable[floor(x)] / rhoest(floor(x));
+    right = rhoTable[ceil(x)] / rhoest(ceil(x));
+
+    \\ Linear interpolation on the scale factors.
+    scale = left + (right - left) * (x - floor(x));
+
+    \\ Return a result based on the scale factor and the asymptotic formula.
+    precision(rhoest(x) * scale, 9)
+};
+addhelp(dickmanrho, "Estimates the value of the Dickman rho function. For x <= 3 the exact values are used, up to rounding; up to "#rhoTable" the value is interpolated using known values and rhoest; after "#rhoTable" rhoest is used, along with a correction factor based on the last value in rhoTable.");
 
 \\ lucas2.gp
 {
@@ -94,7 +121,7 @@ printpoly(N,pols,comment) = {
         d = poldegree(pols[1]);
         skew = (abs(polcoef(pols[1],0))/abs(polcoef(pols[1],d)))^(1/d);
         if(comment, printf("# %s\n", comment));
-        printf("# Sumcoef algebraic side: %d\n", polyscore(pols));
+        printf("# Murphy E?: %.06e\n", polyscore(pols, skew));
         printf("# SNFS difficulty: %.01f\n# GNFS equivalent: %.01f\n", snfs_difficulty, gnfs_difficulty);
         printf("# 4/13 pretest: t%.02f\n", gnfs_difficulty*4/13);
         printf("#  1/3 pretest: t%.02f\n", gnfs_difficulty/3);
@@ -104,9 +131,98 @@ printpoly(N,pols,comment) = {
     )
 }
 
-\\ busby's e-score lol (i.e. TODO implement murphy e score)
-polyscore(pols) = {
-    vecsum(abs(Vec(pols[1])))
+special_valuation(f, p, disc) = {
+    d = poldegree(f);
+    pvaluation_disc = 0;
+    if(disc % p == 0,
+        pvaluation_disc++;
+        t = disc \ p;
+        if(t % p == 0, pvaluation_disc++);
+    p_divides_lc = polcoef(f, d);
+    if(pvaluation_disc == 0,
+        e = #polrootsmod(f, p);
+        if(p_divides_lc,
+            assert(polcoef(f, d-1) % p);
+            e++);
+        return((p * e) / (p * p - 1)),
+    pvaluation_disc == 1,
+        e = #polrootsmod(f, p));
+        if(p_divides_lc, e++;);
+        return((p * e - 1) / (p * p - 1)),
+    \\ default
+        v = special_val0(f, p) * p;
+        if(p_divides_lc,
+           g = subst(polrecip(f),'x,p*'x);
+           v += special_val0(g, p);
+           );
+        v /= p + 1.0;
+        return(v);
+        );
+}
+
+special_val0(f, p) = {
+    c = content(f);
+    i = poldegree(f);
+    v = 0;
+    while(c % p == 0, v++; c = c \ p);
+    g = f\(p^v);
+    h = subst(g, 'x, p*'x);
+    assert(d > 0);
+    roots = liftall(polrootsmod(g,p));
+    nroots = #roots;
+    assert(nroots <= d);
+    r0 = 0;
+    foreach(roots, r,
+        c = subst(g, 'x, r);
+        if(c % p,
+            v += 1.0 / (p - 1),
+        \\default
+            assert(r >= r0);
+            h = subst(h, 'x, 'x + (r - r0)\p);
+            r0 = r;
+            v += special_val0(h, p) \ p));
+    return(v);
+}
+
+get_alpha(poly, B) = {
+    \\ for F linear, we have q_p = 1 for all p, thus alpha(F) = sum(prime p <= B, log(p)/(p^2-1)) ~ 0.569959993064325
+    if(poldegree(poly) == 1, return(0.569959993064325));
+    disc = poldisc(poly);
+    e = special_valuation(poly, 2, disc);
+    alpha = (1.0 - e) * log(2.0);
+    forprime(p=3, B, e = special_valuation(poly, p, disc); alpha += (1.0 / (p - 1) - e) * log(p));
+    return(alpha);
+}
+
+polyscore(pols, skew) = {
+    \\ defaults taken from cado-nfs muprhy score calculation
+    bound_f = 1e7;
+    bound_g = 5e6;
+    area = 1e16;
+    alpha_bound = 2000;
+    k = 1000;
+
+    x = sqrt(area * skew);
+    y = sqrt(area / skew);
+    f = pols[1];
+    g = pols[2];
+    alpha_f = get_alpha(f, alpha_bound);
+    alpha_g = get_alpha(g, alpha_bound);
+    one_over_log_bound_f = 1.0 / log(bound_f);
+    one_over_log_bound_g = 1.0 / log(bound_g);
+    e = 0;
+    for(i=0, k-1,
+        ti = Pi / k * (i + 0.5);
+        xi = x * cos(ti);
+        yi = y * sin(ti);
+        vf = subst(f, 'x, xi / yi) * yi^poldegree(f);
+        vg = subst(f, 'x, xi / yi) * yi^poldegree(g);
+        vf = log(abs(vf)) + alpha_f;
+        vg = log(abs(vg)) + alpha_g;
+        vf *= one_over_log_bound_f;
+        vg *= one_over_log_bound_g;
+        e += dickmanrho(vf) * dickmanrho(vg));
+    return(real(e / k));
 }
 
 invert(pols) = {
@@ -132,21 +248,21 @@ subxk(pols, k) = {
     [apolk, rpolk]
 }
 
-jiggle(N, pols, comment) = {
-    best_score = polyscore(pols);
+jiggle(N, pols, skew, comment) = {
+    best_score = polyscore(pols,skew);
     invpols = invert(pols);
     for(i=1,5,
         jiggled = subxk(pols, i);
-        jscore = polyscore(jiggled);
+        jscore = polyscore(jiggled,skew);
         if(jscore < best_score + 10, printpoly(N, jiggled); best_score = jscore);
         jiggled = subxk(invpols, i);
-        jscore = polyscore(jiggled);
+        jscore = polyscore(jiggled,skew);
         if(jscore < best_score + 10, printpoly(N, jiggled); best_score = jscore);
         jiggled = subxk(pols, -i);
-        jscore = polyscore(jiggled);
+        jscore = polyscore(jiggled,skew);
         if(jscore < best_score + 10, printpoly(N, jiggled); best_score = jscore);
         jiggled = subxk(invpols, -i);
-        jscore = polyscore(jiggled);
+        jscore = polyscore(jiggled,skew);
         if(jscore < best_score + 10, printpoly(N, jiggled); best_score = jscore);
     );
 }
@@ -253,7 +369,7 @@ polyfindv(p,q,k,composite) = {
 \\
 \\All other combinations of factors do not yield viable SNFS polynomials. For example, divisibility by 17 gives an octic but this will sieve slower than the sextic you get without dividing out the factor. Divisibility by 3 and 11 gives a degree 10 polynomial which is hopeless.
 
-k = 665
+k = 789
 p = 2
 q = -1
 f = factor(k,13);
