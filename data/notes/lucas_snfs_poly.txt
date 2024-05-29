@@ -2,13 +2,13 @@
 
 assert(predicate,err)=if(!cond,error(err));
 
-\\ Credit to Charles Greathouse for the dickmanrho implementation
+\\ Credit to Charles Greathouse for the dickmanrho, rhoest, and deBruijnXi implementation
 
 eps() = 10^(-5); \\ precision
 
-deBruijnXi(x)={
+debruijnxi(x)={
     my(left, right, m);
-    if (x < 1, error ("deBruijnXi: Can't find a xi given x < 1."));
+    if (x < 1, error ("debruijnxi: Can't find a xi given x < 1."));
     if (x > 1, left = log(x), left = eps());
     right = 1.35 * log(x) + 1; \\ Heuristic
 
@@ -19,10 +19,10 @@ deBruijnXi(x)={
     );
     (left + right) / 2
 };
-addhelp(deBruijnXi, "deBruijnXi(x): Helper function for rhoest.  Finds a xi such that e^xi - 1 = x * xi.");
+addhelp(debruijnxi, "debruijnxi(x): Helper function for rhoest.  Finds a xi such that e^xi - 1 = x * xi.");
 
 rhoest(x)={
-    my(xi = deBruijnXi(x));
+    my(xi = debruijnxi(x));
     \\exp(Euler) / sqrt(2 * Pi * x) * exp(1 - exp(xi) + intnum(s = eps(), xi, (exp(s) - 1) / s))
     exp(-eint1(-xi) - x * xi) / sqrt(2 * Pi * x) / xi
 };
@@ -121,7 +121,7 @@ printpoly(N,pols,comment) = {
         d = poldegree(pols[1]);
         skew = (abs(polcoef(pols[1],0))/abs(polcoef(pols[1],d)))^(1/d);
         if(comment, printf("# %s\n", comment));
-        printf("# Murphy E?: %.06e\n", polyscore(pols, skew));
+        printf("# Score: %.06e\n", polyscore(pols, skew));
         printf("# SNFS difficulty: %.01f\n# GNFS equivalent: %.01f\n", snfs_difficulty, gnfs_difficulty);
         printf("# 4/13 pretest: t%.02f\n", gnfs_difficulty*4/13);
         printf("#  1/3 pretest: t%.02f\n", gnfs_difficulty/3);
@@ -130,6 +130,8 @@ printpoly(N,pols,comment) = {
         printf("Y0: %d\nY1: %d\n\n", polcoef(pols[2],0), polcoef(pols[2],1));
     )
 }
+
+\\ The following 4 functions were adapted from CADO-NFS Murphy E score calculation
 
 special_valuation(f, p, disc) = {
     d = poldegree(f);
@@ -195,6 +197,7 @@ get_alpha(poly, B) = {
 }
 
 polyscore(pols, skew) = {
+    \\unfortunately the murphy scores seem off for the moment, resort to coefficient sums
     return(vecsum(abs(Vec(pols[1]))));
     \\ defaults taken from cado-nfs muprhy score calculation
     bound_f = 1e7;
@@ -281,7 +284,6 @@ polyfindv(p,q,k,composite) = {
     has9 = k % 9 == 0;
     paramsvec = List();
     if((k-2)%4==0 && !isu,
-            d = 6;
             n = (k-2)\4;
             n_h = 2*n+1;
             foreach([-1, 1], c,
@@ -308,6 +310,7 @@ polyfindv(p,q,k,composite) = {
             d = 8;
             y1 = 1;
             y0 = seqf(p,q,2*k\o); \\ TODO double check this works, probably needs a different constant
+            print("WARNING: 3 * 5 divisibility case could maybe be improved")
             paramsvec = concat(paramsvec, [N, d, y1, y0, "15 divisibility case"]));
     if(has3 && has7,
             o = 21;
@@ -380,112 +383,3 @@ polyfindv(p,q,k,composite) = {
 \\There is the slightly easier sextic for an index divisible by 9 which I don't think has a direct Cunningham parallel; 2LM and 6LM are similar, but then there is no sextic for indices divisible by 3 but not 9.
 \\
 \\All other combinations of factors do not yield viable SNFS polynomials. For example, divisibility by 17 gives an octic but this will sieve slower than the sextic you get without dividing out the factor. Divisibility by 3 and 11 gives a degree 10 polynomial which is hopeless.
-
-k = 789
-p = 2
-q = -1
-f = factor(k,13);
-o = if(#f == 1, f[1,1], f[1,1] == 2, f[2,1], f[1,1])
-N = V(p,q,k)\V(p,q,k\o)
-d = eulerphi(o)
-d = if(d==2, 6, d)
-x = V(p,q,(o-1)*k\o\d+1)
-y = V(p,q,(o-1)*k\o\d)
-result = plindep(N,d,x,y)
-printpoly(N, result)
-jiggle(N, result)
-x = 1
-y = V(p,q,k\o)
-result = plindep(N,d,x,y)
-printpoly(N, result)
-jiggle(N, result)
-x = U(p,q,(o-1)*k\o\d+1)
-y = U(p,q,(o-1)*k\o\d)
-result = plindep(N,d,x,y)
-printpoly(N, result)
-jiggle(N, result)
-
-
-\\ For indices divisible by 9, CPell(9n)/CPell(3n) has a sextic poly in CPell(n), i.e. Y1 = 1, Y0 = -CPell(n).
-k = 747
-p = 2
-q = -1
-o = 9
-N = V(p,q,k)\V(p,q,k\3)
-d = 6
-x = 1
-y = V(p,q,k\o)
-result = plindep(N,d,x,y)
-
-\\ For indices divisible by 25, CPell(25n)/CPell(5n) has a ? poly in CPell(?n), i.e. Y1 = 1, Y0 = -CPell(?n).
-k = 800
-p = 2
-q = -1
-o = 25
-N = V(p,q,k)\V(p,q,k\5)
-d = 6
-x = 1
-y = V(p,q,k\o)
-result = plindep(N,d,x,y)
-
-
-\\ For indices divisible by 15, CPell(15n)*CPell(n)/(CPell(5n)*CPell(3n)) has a quartic poly in CPell(2n).
-k = 915
-p = 2
-q = -1
-o = 15
-N = V(p,q,k)*V(p,q,k\15)\(V(p,q,k\3)*V(p,q,k\5))
-d = 4
-x = 1
-y = V(p,q,2*k\o)
-result = plindep(N,d,x,y)
-printpoly(N, result)
-jiggle(N, result)
-
-\\ if k is prime or N is composite with no small divisors, divide by the order of the polynomial you're trying to find
-\\ calculate target SNFS composite N
-k = 866
-p = 2
-q = -1
-\\ divide out the small factors (not sure what counts as small)
-N = V(p,q,k);
-\\ find small factors:
-factors = factor(N,10^5)
-div = 1
-for(i = 1, #factors[,1]-1, div=div * vecprod(factors[i,]))
-N = V(p,q,k)\div;
-d = 6
-x = U(p,q,k\d+1)
-y = U(p,q,k\d)
-result = plindep(N,d,x,y)
-
-
-\\hCPells: CPell(4k+2)=2*(2*Pell(2k+1)+1)*(2*Pell(2k+1)-1)
-n = 886
-p = 2
-q = -1
-d = 6
-k = (n-2)\4
-n_h = 2*k+1
-N = 2*U(p,q,n_h)+1 \\ +-1 for the other hCPell
-x = U(p,q,n_h\d+1)
-y = U(p,q,n_h\d-1)
-result = plindep(N,d,x,y)
-printpoly(N, result)
-jiggle(N, result)
-
-\\
-\\ = [1, -41, -102, -105, -60, -15, -6, 1]~
-\\ which gives poly:
-\\
-\\ n: {N}
-\\ skew: {(result[2]/result[8])^(1/d)}
-\\ c6: {result[8]}
-\\ c5: {result[7]}
-\\ c4: {result[6]}
-\\ c3: {result[5]}
-\\ c2: {result[4]}
-\\ c1: {result[3]}
-\\ c0: {result[2]}
-\\ Y1: {x}
-\\ Y0: {-y}
