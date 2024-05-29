@@ -17,10 +17,12 @@ __trialdivisors = primesieve.primes(2, int(1e6))
 __primes_set = frozenset(primesieve.primes(2, int(1e7)))
 # https://github.com/aleaxit/gmpy/issues/354#issuecomment-1404620217
 __gmp_BPSW_LIMIT = (21 * pow(gmpy2.mpz(10), gmpy2.mpz(15)))//10
-__pfgw_factordb_digit_limit = 20000
+__pfgw_factordb_digit_limit = 7500
 # don't even trial_div if it's more than 5000 digits, as we'll probably be slow
 __in_house_trialdiv_digit_limit = 100
-# gmpy2.is_prime is pretty fast up to
+# gmpy2.is_prime is pretty fast up
+__pfgw_path = "C:/Software/pfgw_win_4.0.4/pfgw64.exe"\
+    if os.name == 'nt' else os.path.join(os.path.expanduser("~"), "pfgw", "pfgw64")
 
 
 # public api, 0 composite, 1 probable prime, 2 definite prime
@@ -31,7 +33,7 @@ def is_prime(n, check_factor_db=False, care_probable=True, factordb_pfgw_limit=_
     if n < __gmp_BPSW_LIMIT:
         return gmpy2_is_prime(n)
     # trial div under a certain size
-    if trial_div_limit and n < trial_div_limit:
+    if trial_div_limit and gmpy2.num_digits(n) < trial_div_limit:
         trial_div_prime_test_result = trial_div_prime_test(n)
         if trial_div_prime_test_result == 0 or trial_div_prime_test_result == 2:
             return trial_div_prime_test_result
@@ -77,7 +79,7 @@ def trial_div_prime_test(n, divisors=__trialdivisors):
 def check_factordb_prime(expr, retries=3, sleep_time=5):
     str_expression = str(expr)
     text = f"{len(str_expression)} char expression: {str_expression[:10] + '...' + str_expression[-10:]}" if len(
-        str_expression) > 100 else expr
+        str_expression) > 200 else expr
     logging.info(f"Checking factordb for prime status of: {text}")
     f = FactorDB(expr)
     f.connect()
@@ -110,10 +112,11 @@ def prp_test_pfgw(expr):
         with open(temp_filepath, "w") as temp:
             temp.write(str_expression)
             temp.write("\n")
-        is_prp = False
-        is_trivially_prime = False
+        pfgw_returned_composite = False
+        pfgw_returned_prp = False
+        pfgw_returned_prime = False
         proc = subprocess.Popen([
-            "C:/Users/Tyler/Downloads/pfgw_win_4.0.4/distribution/pfgw64.exe",
+            __pfgw_path,
             "-k", filename,  # "-f0",
         ], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True,
             cwd=dirpath)
@@ -126,9 +129,17 @@ def prp_test_pfgw(expr):
                 info_logged = True
             logging.debug(line[:-1])
             if "trivially prime!" in line:
-                is_trivially_prime = True
+                pfgw_returned_prime = True
+            if "is prime!" in line:
+                pfgw_returned_prime = True
             if "3-PRP" in line:
-                is_prp = True
+                pfgw_returned_prp = True
+            if "is PRP" in line:
+                pfgw_returned_prp = True
+            if "PRP!" in line:
+                pfgw_returned_prp = True
+            if "is composite" in line:
+                pfgw_returned_composite = True
             if "Evaluator failed" in line:
                 raise Exception("PFGW had trouble evaluating the expression")
             elif "Error opening file" in line:
@@ -138,12 +149,13 @@ def prp_test_pfgw(expr):
     finally:
         # cleanup temp dir
         shutil.rmtree(dirpath, ignore_errors=True)
-    assert not (is_prp and is_trivially_prime)
-    if is_trivially_prime:
+    if pfgw_returned_prime:
         return 2
-    if is_prp:
+    if pfgw_returned_prp:
         return 1
-    return 0
+    if pfgw_returned_composite:
+        return 0
+    raise Exception("PFGW gave no result")
 
 
 def generator(start=0, start_nth=False):
@@ -183,7 +195,7 @@ if __name__ == "__main__":
 #
 #     code = """
 # import random
-# import primetest
+# import prime
 # import gmpy2
 # random.seed(42)
 # magnitude = {}
@@ -194,9 +206,9 @@ if __name__ == "__main__":
 #     {}
 # """
 #     functions = [
-#         "primetest.is_prime(num)",
-#         "primetest.trial_div_prime_test(num)",
-#         "primetest.prp_test_pfgw(num)",
+#         "prime.is_prime(num)",
+#         "prime.trial_div_prime_test(num)",
+#         "prime.prp_test_pfgw(num)",
 #     ]
 #     for magnitude_counter in itertools.count(start=124):
 #         magnitude = 1000 * magnitude_counter
