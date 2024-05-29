@@ -195,6 +195,7 @@ get_alpha(poly, B) = {
 }
 
 polyscore(pols, skew) = {
+    return(vecsum(abs(Vec(pols[1]))));
     \\ defaults taken from cado-nfs muprhy score calculation
     bound_f = 1e7;
     bound_g = 5e6;
@@ -254,21 +255,20 @@ jiggle(N, pols, skew, comment) = {
     for(i=1,5,
         jiggled = subxk(pols, i);
         jscore = polyscore(jiggled,skew);
-        if(jscore < best_score + 10, printpoly(N, jiggled); best_score = jscore);
+        if(jscore < best_score + 10, printpoly(N, jiggled, comment); best_score = jscore);
         jiggled = subxk(invpols, i);
         jscore = polyscore(jiggled,skew);
-        if(jscore < best_score + 10, printpoly(N, jiggled); best_score = jscore);
+        if(jscore < best_score + 10, printpoly(N, jiggled, comment); best_score = jscore);
         jiggled = subxk(pols, -i);
         jscore = polyscore(jiggled,skew);
-        if(jscore < best_score + 10, printpoly(N, jiggled); best_score = jscore);
+        if(jscore < best_score + 10, printpoly(N, jiggled, comment); best_score = jscore);
         jiggled = subxk(invpols, -i);
         jscore = polyscore(jiggled,skew);
-        if(jscore < best_score + 10, printpoly(N, jiggled); best_score = jscore);
+        if(jscore < best_score + 10, printpoly(N, jiggled, comment); best_score = jscore);
     );
 }
 
 \\public api, implemented first for V case, will have to adjust for U case
-\\ TODO add hcpell case
 polyfindv(p,q,k,composite) = {
     isu = 0;
     seqf = if(isu, U, V);
@@ -280,8 +280,19 @@ polyfindv(p,q,k,composite) = {
     has13 = k % 13 == 0;
     has9 = k % 9 == 0;
     paramsvec = List();
+    if((k-2)%4==0 && !isu,
+            d = 6;
+            n = (k-2)\4;
+            n_h = 2*n+1;
+            foreach([-1, 1], c,
+                N = 2*U(p,q,n_h)+c;
+                if (N % composite == 0,
+                    foreach([4,6,8], d,
+                        foreach([[U(p,q,n_h\d+1), U(p,q,n_h\d)],
+                                 [U(p,q,n_h\d+1), U(p,q,n_h\d-1)]], yvec,
+                            paramsvec = concat(paramsvec, [N, d, yvec[1], yvec[2], "hcpell case"]))))));
     if(has9,
-           o = 9;
+            o = 9;
             y1 = 1;
             y0 = -seqf(p,q,k\o); \\works in V(k\9); \\ cpells
             N = seqf(p,q,k)\seqf(p,q,k\3);
@@ -337,8 +348,9 @@ polyfindv(p,q,k,composite) = {
             y0 = U(p,q,k\d-1);
             paramsvec = concat(paramsvec, [N, d, y1, y0, "default case"]);
             \\ TODO add other y1 y0?
-    );
 
+    );
+    paramsvec = Vecrev(paramsvec);
     for (i = 1, #paramsvec, params = paramsvec[i];
                             N = params[1];
                             d = params[2];
@@ -347,7 +359,7 @@ polyfindv(p,q,k,composite) = {
                             comment = params[5];
                             result = plindep(N, d, y1, y0);
                             printpoly(N, result, comment);
-                            jiggle(N, result, comment););
+                            jiggle(N, result, skew, comment));
 }
 
 
@@ -449,7 +461,7 @@ result = plindep(N,d,x,y)
 
 
 \\hCPells: CPell(4k+2)=2*(2*Pell(2k+1)+1)*(2*Pell(2k+1)-1)
-n = 665
+n = 886
 p = 2
 q = -1
 d = 6
@@ -457,7 +469,7 @@ k = (n-2)\4
 n_h = 2*k+1
 N = 2*U(p,q,n_h)+1 \\ +-1 for the other hCPell
 x = U(p,q,n_h\d+1)
-y = U(p,q,n_h\d)
+y = U(p,q,n_h\d-1)
 result = plindep(N,d,x,y)
 printpoly(N, result)
 jiggle(N, result)
