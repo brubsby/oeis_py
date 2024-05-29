@@ -310,7 +310,7 @@ polyfindv(p,q,k,composite) = {
             d = 8;
             y1 = 1;
             y0 = seqf(p,q,2*k\o); \\ TODO double check this works, probably needs a different constant
-            print("WARNING: 3 * 5 divisibility case could maybe be improved")
+            print("WARNING: 3 * 5 divisibility case could maybe be improved");
             paramsvec = concat(paramsvec, [N, d, y1, y0, "15 divisibility case"]));
     if(has3 && has7,
             o = 21;
