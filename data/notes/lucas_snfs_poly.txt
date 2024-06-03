@@ -62,83 +62,6 @@ dickmanrho(x)={
 };
 addhelp(dickmanrho, "Estimates the value of the Dickman rho function. For x <= 3 the exact values are used, up to rounding; up to "#rhoTable" the value is interpolated using known values and rhoest; after "#rhoTable" rhoest is used, along with a correction factor based on the last value in rhoTable.");
 
-\\ lucas2.gp
-{
-        lucas2(k,P,Q,     n,s,j,Ql,Qh,Uh,Vl,Vh) =
-        n = floor(log(k)/log(2)) + 1;
-        s = 0;
-        while( bittest(k,s) == 0, s = s + 1 );
-        Uh = 1; Vl = 2; Vh = P;
-        Ql = 1; Qh = 1;
-        forstep( j = n-1, s+1, -1,
-                Ql = Ql * Qh;
-                if( bittest(k,j),
-                        Qh = Ql * Q;
-                        Uh = Uh * Vh;
-                        Vl = Vh * Vl - P * Ql;
-                        Vh = Vh * Vh - 2 * Qh,
-
-                        Uh = Uh * Vl - Ql;
-                        Vh = Vh * Vl - P * Ql;
-                        Vl = Vl * Vl - 2 * Ql;
-                        Qh = Ql;
-                );
-        );
-        Ql = Ql * Qh; Qh = Ql * Q;
-        Uh = Uh * Vl - Ql;
-        Vl = Vh * Vl - P * Ql;
-        Ql = Ql * Qh;
-        for( j = 1, s,
-                Uh = Uh * Vl;
-                Vl = Vl * Vl - 2 * Ql;
-                Ql = Ql * Ql;
-        );
-        [Uh,Vl]
-}
-U(p,q,n)=lucas2(n,p,q)[1];
-V(p,q,n)=lucas2(n,p,q)[2];
-
-
-sympoly(d) = {
-   pret=Vec(0,d+1);
-   for(i=0,d,pret[i+1]='y^i*'x^(d-i));
-   return(pret);
-}
-
-plindep(N,d,x,y,comment) = {
-    result = lindep(subst(subst(concat(N, sympoly(d)), 'x, x), 'y, y));
-    polygcd = content(result[2..#result]);
-    apol = Polrev(result[2..#result]\polygcd);
-    rpol = (-y+x*'x)\content([x,y]);
-    return([apol, rpol, comment]);
-}
-
-snfs_difficulty(pols) ={
-    my(x=-polcoef(pols[2],0)/polcoef(pols[2],1));
-    return(real(log(polcoef(pols[2],1)^poldegree(pols[1])*eval(pols[1]))/log(10)));
-}
-
-gnfs_difficulty(pols) = {
-    return(snfs_difficulty(pols)*.56+30)
-}
-
-printpoly(N,pols) = {
-    if(poldegree(pols[1]) > 3,
-        snfs_diff = snfs_difficulty(pols);
-        gnfs_diff = snfs_diff*.56+30;
-        comment = pols[3];
-        d = poldegree(pols[1]);
-        skew = (abs(polcoef(pols[1],0))/abs(polcoef(pols[1],d)))^(1/d);
-        if(comment, printf("# %s\n", comment));
-        printf("# Score: %.06e\n", polyscore(pols, skew));
-        printf("# SNFS difficulty: %.01f\n# GNFS equivalent: %.01f\n", snfs_diff, gnfs_diff);
-        printf("# 4/13 pretest: t%.02f\n", gnfs_diff*4/13);
-        printf("#  1/3 pretest: t%.02f\n", gnfs_diff/3);
-        printf("type: snfs\nn: %d\nskew: %.02f\n", N, skew);
-        for (i = 0, d, if(polcoef(pols[1],i) != 0, printf("c%d: %d\n", i, polcoef(pols[1],i))));
-        printf("Y0: %d\nY1: %d\n\n", polcoef(pols[2],0), polcoef(pols[2],1));
-    )
-}
 
 \\ The following 4 functions were adapted from CADO-NFS Murphy E score calculation
 
@@ -238,7 +161,90 @@ polyscore(pols, skew) = {
     return(real(e / k));
 }
 
-invert(pols) = [Polrev(Vec(pols[1])), Polrev(Vec(pols[2])), pols[3]];
+\\ lucas2.gp
+{
+        lucas2(k,P,Q,     n,s,j,Ql,Qh,Uh,Vl,Vh) =
+        n = floor(log(k)/log(2)) + 1;
+        s = 0;
+        while( bittest(k,s) == 0, s = s + 1 );
+        Uh = 1; Vl = 2; Vh = P;
+        Ql = 1; Qh = 1;
+        forstep( j = n-1, s+1, -1,
+                Ql = Ql * Qh;
+                if( bittest(k,j),
+                        Qh = Ql * Q;
+                        Uh = Uh * Vh;
+                        Vl = Vh * Vl - P * Ql;
+                        Vh = Vh * Vh - 2 * Qh,
+
+                        Uh = Uh * Vl - Ql;
+                        Vh = Vh * Vl - P * Ql;
+                        Vl = Vl * Vl - 2 * Ql;
+                        Qh = Ql;
+                );
+        );
+        Ql = Ql * Qh; Qh = Ql * Q;
+        Uh = Uh * Vl - Ql;
+        Vl = Vh * Vl - P * Ql;
+        Ql = Ql * Qh;
+        for( j = 1, s,
+                Uh = Uh * Vl;
+                Vl = Vl * Vl - 2 * Ql;
+                Ql = Ql * Ql;
+        );
+        [Uh,Vl]
+}
+U(p,q,n)=lucas2(n,p,q)[1];
+V(p,q,n)=lucas2(n,p,q)[2];
+
+
+sympoly(d) = {
+   pret=Vec(0,d+1);
+   for(i=0,d,pret[i+1]='y^i*'x^(d-i));
+   return(pret);
+}
+
+plindep(N,d,x,y,comment) = {
+    result = lindep(subst(subst(concat(N, sympoly(d)), 'x, x), 'y, y));
+    polygcd = content(result[2..#result]);
+    apol = Polrev(result[2..#result]\polygcd);
+    rpol = (-y+x*'x)\content([x,y]);
+    return([apol, rpol, comment, N]);
+}
+
+snfs_difficulty(pols) ={
+    my(x=-polcoef(pols[2],0)/polcoef(pols[2],1));
+    return(real(log(polcoef(pols[2],1)^poldegree(pols[1])*eval(pols[1]))/log(10)));
+}
+
+gnfs_difficulty(pols) = {
+    return(snfs_difficulty(pols)*.56+30);
+}
+
+calculate_skew(poly) = {
+    d = poldegree(poly[1]);
+    return((abs(polcoef(poly[1],0))/abs(polcoef(poly[1],d)))^(1/d));
+}
+
+printpoly(pols) = {
+    N = pols[4];
+    if(poldegree(pols[1]) > 3,
+        snfs_diff = snfs_difficulty(pols);
+        gnfs_diff = snfs_diff*.56+30;
+        comment = pols[3];
+        skew = calculate_skew(pols);
+        if(comment, printf("# %s\n", comment));
+        printf("# Score: %.06e\n", polyscore(pols, skew));
+        printf("# SNFS difficulty: %.01f\n# GNFS equivalent: %.01f\n", snfs_diff, gnfs_diff);
+        printf("# 4/13 pretest: t%.02f\n", gnfs_diff*4/13);
+        printf("#  1/3 pretest: t%.02f\n", gnfs_diff/3);
+        printf("type: snfs\nn: %d\nskew: %.02f\n", N, skew);
+        for (i = 0, d, if(polcoef(pols[1],i) != 0, printf("c%d: %d\n", i, polcoef(pols[1],i))));
+        printf("Y0: %d\nY1: %d\n\n", polcoef(pols[2],0), polcoef(pols[2],1));
+    )
+}
+
+invert(pols) = [Polrev(Vec(pols[1])), Polrev(Vec(pols[2])), pols[3], pols[4]];
 
 subxk(pols, k) = {
     \\ reduce by gcd if not done already
@@ -256,7 +262,7 @@ subxk(pols, k) = {
     rpolkvec = rpolkvec\content(rpolkvec);
     apolk = Pol(apolkvec, 'x);
     rpolk = Pol(rpolkvec, 'x);
-    return([apolk, rpolk, pols[3]]);
+    return([apolk, rpolk, pols[3], pols[4]]);
 }
 
 jiggle(pols) = {
@@ -268,8 +274,7 @@ jiggle(pols) = {
 }
 
 \\public api, implemented first for V case, will have to adjust for U case
-polyfindv(p,q,k,composite=0) = {
-    isu = 0;
+polygen(isu, p,q,k,composite=0) = {
     seqf = if(isu, U, V);
     parentN = seqf(p,q,k);
     has3 = k % 3 == 0;
@@ -354,17 +359,32 @@ polyfindv(p,q,k,composite=0) = {
                             comment = params[5];
                             result_polys = concat(result_polys, jiggle(plindep(N, d, y1, y0, comment))));
     for(i=1, #result_polys, result_polys[i] = concat(concat(result_polys[i], snfs_difficulty(result_polys[i])), polyscore(result_polys[i])));
-
-    result_polys = vecsort(result_polys, polysortcmp, 12);
-    foreach(result_polys, poly, printpoly(N, poly));
+    result_polys = vecsort(result_polys, polysortcmp, 8);
     return(result_polys);
 }
 
+
+polygenu(p, q, k, composite=0) = polygen(1, p, q, k, composite);
+polygenv(p, q, k, composite=0) = polygen(0, p, q, k, composite);
+
+polyfind(isu, p, q, k, composite=0, numpolys=10) = {
+    result_polys = polygen(isu, p, q, k, composite);
+    final_polys = Vecrev(result_polys[1..numpolys]);
+    apply(printpoly, final_polys);
+    return(final_polys);
+}
+
+polyfindu(p, q, k, composite=0, numpolys=10) = polyfind(1, p, q, k, composite, numpolys);
+polyfindv(p, q, k, composite=0, numpolys=10) = polyfind(0, p, q, k, composite, numpolys);
+
 polysortcmp(x, y) = {
+    coef_diff = vecsum(abs(Vec(x[1]))) - vecsum(abs(Vec(y[1])));
+    \\ if coeff diff is > 10^4, sort by that (get rid of the fails)
+    if(abs(coef_diff) > 10^4, coef_diff);
     xdegree = poldegree(x[1]);
     ydegree = poldegree(y[1]);
-    xsnfs = x[4];
-    ysnfs = y[4];
+    xsnfs = x[5];
+    ysnfs = y[5];
     \\ if they have a difference of 20 or more SNFS difficulty, sort based on that
     snfs_diff_diff = xsnfs - ysnfs;
     if(abs(snfs_diff_diff) >= 20, return(snfs_diff_diff));
@@ -373,8 +393,8 @@ polysortcmp(x, y) = {
     distance_difference = xdegree_distance - ydegree_distance;
     \\ if one is "in the pocket", and the other isn't, put the in the pocket one first.
     if(abs(distance_difference), return(distance_difference));
-    xscore = x[5];
-    yscore = y[5];
+    xscore = x[6];
+    yscore = y[6];
     \\ last compare polyscore;
     return(xscore - yscore);
 }
