@@ -102,29 +102,38 @@ V(p,q,n)=lucas2(n,p,q)[2];
 sympoly(d) = {
    pret=Vec(0,d+1);
    for(i=0,d,pret[i+1]='y^i*'x^(d-i));
-   pret
+   return(pret);
 }
 
-plindep(N,d,x,y) = {
+plindep(N,d,x,y,comment) = {
     result = lindep(subst(subst(concat(N, sympoly(d)), 'x, x), 'y, y));
     polygcd = content(result[2..#result]);
     apol = Polrev(result[2..#result]\polygcd);
-    rpol = -y+x*'x;
-    [apol, rpol]
+    rpol = (-y+x*'x)\content([x,y]);
+    return([apol, rpol, comment]);
 }
 
-printpoly(N,pols,comment) = {
+snfs_difficulty(pols) ={
+    my(x=-polcoef(pols[2],0)/polcoef(pols[2],1));
+    return(real(log(polcoef(pols[2],1)^poldegree(pols[1])*eval(pols[1]))/log(10)));
+}
+
+gnfs_difficulty(pols) = {
+    return(snfs_difficulty(pols)*.56+30)
+}
+
+printpoly(N,pols) = {
     if(poldegree(pols[1]) > 3,
-        my(x=-polcoef(pols[2],0)/polcoef(pols[2],1));
-        snfs_difficulty = real(log(polcoef(pols[2],1)^poldegree(pols[1])*eval(pols[1]))/log(10));
-        gnfs_difficulty = snfs_difficulty*.56+30;
+        snfs_diff = snfs_difficulty(pols);
+        gnfs_diff = snfs_diff*.56+30;
+        comment = pols[3];
         d = poldegree(pols[1]);
         skew = (abs(polcoef(pols[1],0))/abs(polcoef(pols[1],d)))^(1/d);
         if(comment, printf("# %s\n", comment));
         printf("# Score: %.06e\n", polyscore(pols, skew));
-        printf("# SNFS difficulty: %.01f\n# GNFS equivalent: %.01f\n", snfs_difficulty, gnfs_difficulty);
-        printf("# 4/13 pretest: t%.02f\n", gnfs_difficulty*4/13);
-        printf("#  1/3 pretest: t%.02f\n", gnfs_difficulty/3);
+        printf("# SNFS difficulty: %.01f\n# GNFS equivalent: %.01f\n", snfs_diff, gnfs_diff);
+        printf("# 4/13 pretest: t%.02f\n", gnfs_diff*4/13);
+        printf("#  1/3 pretest: t%.02f\n", gnfs_diff/3);
         printf("type: snfs\nn: %d\nskew: %.02f\n", N, skew);
         for (i = 0, d, if(polcoef(pols[1],i) != 0, printf("c%d: %d\n", i, polcoef(pols[1],i))));
         printf("Y0: %d\nY1: %d\n\n", polcoef(pols[2],0), polcoef(pols[2],1));
@@ -229,9 +238,7 @@ polyscore(pols, skew) = {
     return(real(e / k));
 }
 
-invert(pols) = {
-     [Polrev(Vec(pols[1])), Polrev(Vec(pols[2]))]
-}
+invert(pols) = [Polrev(Vec(pols[1])), Polrev(Vec(pols[2])), pols[3]];
 
 subxk(pols, k) = {
     \\ reduce by gcd if not done already
@@ -249,30 +256,19 @@ subxk(pols, k) = {
     rpolkvec = rpolkvec\content(rpolkvec);
     apolk = Pol(apolkvec, 'x);
     rpolk = Pol(rpolkvec, 'x);
-    [apolk, rpolk]
+    return([apolk, rpolk, pols[3]]);
 }
 
-jiggle(N, pols, skew, comment) = {
-    best_score = polyscore(pols,skew);
+jiggle(pols) = {
     invpols = invert(pols);
+    retpolys = List([pols, invpols]);
     for(i=1,5,
-        jiggled = subxk(pols, i);
-        jscore = polyscore(jiggled,skew);
-        if(jscore < best_score + 10, printpoly(N, jiggled, comment); best_score = jscore);
-        jiggled = subxk(invpols, i);
-        jscore = polyscore(jiggled,skew);
-        if(jscore < best_score + 10, printpoly(N, jiggled, comment); best_score = jscore);
-        jiggled = subxk(pols, -i);
-        jscore = polyscore(jiggled,skew);
-        if(jscore < best_score + 10, printpoly(N, jiggled, comment); best_score = jscore);
-        jiggled = subxk(invpols, -i);
-        jscore = polyscore(jiggled,skew);
-        if(jscore < best_score + 10, printpoly(N, jiggled, comment); best_score = jscore);
-    );
+        retpolys = concat(retpolys, List([subxk(pols, i), subxk(invpols, i), subxk(pols, -i), subxk(invpols, -i)])));
+    return(retpolys)
 }
 
 \\public api, implemented first for V case, will have to adjust for U case
-polyfindv(p,q,k,composite) = {
+polyfindv(p,q,k,composite=0) = {
     isu = 0;
     seqf = if(isu, U, V);
     parentN = seqf(p,q,k);
@@ -288,11 +284,11 @@ polyfindv(p,q,k,composite) = {
             n_h = 2*n+1;
             foreach([-1, 1], c,
                 N = 2*U(p,q,n_h)+c;
-                if (N % composite == 0,
+                if (composite == 0 || N % composite == 0,
                     foreach([4,6,8], d,
                         foreach([[U(p,q,n_h\d+1), U(p,q,n_h\d)],
                                  [U(p,q,n_h\d+1), U(p,q,n_h\d-1)]], yvec,
-                            paramsvec = concat(paramsvec, [N, d, yvec[1], yvec[2], "hcpell case"]))))));
+                            paramsvec = concat(paramsvec, [N, d, yvec[1], yvec[2], "hcpell diff of squares case"]))))));
     if(has9,
             o = 9;
             y1 = 1;
@@ -337,34 +333,72 @@ polyfindv(p,q,k,composite) = {
                                    paramsvec = concat(paramsvec, [N, d, 1, V(p,q,k\o), strprintf("%d divisibility case", o)]))));
 
     if(1, \\ prime or composite with no small factors case
-            N = V(p,q,k);
+            N = seqf(p,q,k);
             \\ find small factors:
             factors = factor(N,10^5); \\ TODO might need adjusting
             div = 1;
             for(i = 1, #factors[,1]-1, div=div * vecprod(factors[i,]));
             N = seqf(p,q,k)\div;
-            d = 6;
-            y1 = U(p,q,k\d+1); \\ for some reason U works better always \\ TODO confirm this
-            y0 = U(p,q,k\d);
-            paramsvec = concat(paramsvec, [N, d, y1, y0, "default case"]);
-            y1 = U(p,q,k\d+1);
-            y0 = U(p,q,k\d-1);
-            paramsvec = concat(paramsvec, [N, d, y1, y0, "default case"]);
-            \\ TODO add other y1 y0?
-
-    );
+            foreach([4,6,8], d,
+                foreach([U,V], base_func,
+                    foreach([[base_func(p,q,k\d+1), base_func(p,q,k\d)], \\ for some reason U works better always \\ TODO confirm this
+                            [base_func(p,q,k\d+1), base_func(p,q,k\d-1)]], yvec,
+                                paramsvec = concat(paramsvec, [N, d, yvec[1], yvec[2], "default case"])))));
     paramsvec = Vecrev(paramsvec);
+    result_polys = List();
     for (i = 1, #paramsvec, params = paramsvec[i];
                             N = params[1];
                             d = params[2];
                             y1 = params[3];
                             y0 = params[4];
                             comment = params[5];
-                            result = plindep(N, d, y1, y0);
-                            printpoly(N, result, comment);
-                            jiggle(N, result, skew, comment));
+                            result_polys = concat(result_polys, jiggle(plindep(N, d, y1, y0, comment))));
+    for(i=1, #result_polys, result_polys[i] = concat(concat(result_polys[i], snfs_difficulty(result_polys[i])), polyscore(result_polys[i])));
+
+    result_polys = vecsort(result_polys, polysortcmp, 12);
+    foreach(result_polys, poly, printpoly(N, poly));
+    return(result_polys);
 }
 
+polysortcmp(x, y) = {
+    xdegree = poldegree(x[1]);
+    ydegree = poldegree(y[1]);
+    xsnfs = x[4];
+    ysnfs = y[4];
+    \\ if they have a difference of 20 or more SNFS difficulty, sort based on that
+    snfs_diff_diff = xsnfs - ysnfs;
+    if(abs(snfs_diff_diff) >= 20, return(snfs_diff_diff));
+    xdegree_distance = sign(degree_distance(xdegree, xsnfs));
+    ydegree_distance = sign(degree_distance(ydegree, ysnfs));
+    distance_difference = xdegree_distance - ydegree_distance;
+    \\ if one is "in the pocket", and the other isn't, put the in the pocket one first.
+    if(abs(distance_difference), return(distance_difference));
+    xscore = x[5];
+    yscore = y[5];
+    \\ last compare polyscore;
+    return(xscore - yscore);
+}
+
+\\ distance in decimal digits away from the "optimal degree zone" for SNFS only, i.e.
+\\4: <100
+\\5: 100-200
+\\6: 200-260?
+\\7: 260?
+\\8: 260?
+degree_distance(deg, difficulty) = {
+    if( deg == 4, zone_distance(difficulty, 0, 100),
+        deg == 5, zone_distance(difficulty, 100, 200),
+        deg == 6, zone_distance(difficulty, 200, 260),
+        zone_distance(difficulty, 260, 1000))
+}
+
+\\ helper for above function, just outputs 0 if in the bounds or distance to the closest bound if not
+\\ assumes positive inputs
+zone_distance(value, low_bound, high_bound) = {
+    if(value < low_bound, low_bound - value,
+       value > high_bound, value - high_bound,
+       0)
+}
 
 \\Regarding poly selection for indices divisible by 3: for CPell(3n)/CPell(n), you can use the usual lindep method, but as the number is similar in size to CPell(2n) you should pick Y0 and Y1 accordingly. Only even degrees will be possible.
 
@@ -383,3 +417,5 @@ polyfindv(p,q,k,composite) = {
 \\There is the slightly easier sextic for an index divisible by 9 which I don't think has a direct Cunningham parallel; 2LM and 6LM are similar, but then there is no sextic for indices divisible by 3 but not 9.
 \\
 \\All other combinations of factors do not yield viable SNFS polynomials. For example, divisibility by 17 gives an octic but this will sieve slower than the sextic you get without dividing out the factor. Divisibility by 3 and 11 gives a degree 10 polynomial which is hopeless.
+
+\\TODO https://www.mersenneforum.org/showthread.php?p=453018&highlight=lucas#post453018
