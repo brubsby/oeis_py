@@ -1,0 +1,4 @@
+gmpy2
+requests
+aiohttp
+aiohttp_retry
