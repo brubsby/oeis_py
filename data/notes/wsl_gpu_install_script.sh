@@ -52,7 +52,7 @@ source ~/.bashrc
 # alternatively, this seems fine
 sudo apt-get install libgmp3-dev
 
-# get CGBN
+# get CGBN (for GPU ECM)
 git clone https://github.com/NVlabs/CGBN.git
 
 # get ecm source
@@ -77,30 +77,51 @@ git clone https://gitlab.inria.fr/cado-nfs/cado-nfs.git
 cd cado-nfs
 make
 
-# now for yafu
-# https://www.mersenneforum.org/showpost.php?p=622435&postcount=7
-# install msieve
-# cpu version
-#sudo apt-get install subversion
-#svn co https://svn.code.sf.net/p/msieve/code/trunk msieve
-#cd msieve
-#make all
-
 # gpu msieve
 git clone https://github.com/gchilders/msieve_nfsathome.git -b msieve-lacuda-nfsathome
 cd msieve_nfsathome
 make clean
-# below sed makes this change: https://www.mersenneforum.org/showpost.php?p=625660&postcount=122
+# the below sed line makes this change: https://www.mersenneforum.org/showpost.php?p=625660&postcount=122
 # which fixes `identifier "CUB_IS_DEVICE_CODE" is undefined`
 sed -i -E 's/INC = -I\"\$\(CUDA_ROOT\)\/include\" -I\./INC = -I\. -I\"\$\(CUDA_ROOT\)\/include\"/' cub/Makefile
-make all VBITS=256 CUDA=89 #ECM=1 NO_ZLIB=1 #maybe need these for yafu?
-# maybe more optimal to change these for specific gpu
+# if below breaks, set GENCODE (e.g. CUDA=89) to your GPU's gencode https://arnon.dk/matching-sm-architectures-arch-and-gencode-for-various-nvidia-cards/
+GENCODE=$(nvidia-smi --query-gpu=compute_cap --format=csv | awk -F"." 'END{print $1$2}')
+make all VBITS=256 CUDA=$GENCODE #ECM=1 NO_ZLIB=1 #maybe need these for yafu?
+# VBITS can be changed in certain situations for more optimal performance, though I forget exactly when.
 cd ~
 
+# now for yafu
+# https://www.mersenneforum.org/showpost.php?p=622435&postcount=7
+
+
+# cpu msieve
+cd ~
+sudo apt-get install subversion
+svn co https://svn.code.sf.net/p/msieve/code/trunk msieve
+cd msieve
+make all
+
+
+# gmp for yafu (not necessary as long as the apt-get version works)
+#GMPVERSION="6.2.1"
+#wget https://gmplib.org/download/gmp/gmp-$GMPVERSION.tar.lz
+#tar --lzip -xf gmp-$GMPVERSION.tar.lz
+#rm gmp-$GMPVERSION.tar.lz
+#cd gmp-$GMPVERSION
+#autoreconf -i
+#./configure --prefix=$HOME/gmp-install/$GMPVERSION/
+#make
+#sudo make install
+
 # cpu ecm (for yafu)
-git clone https://gitlab.inria.fr/zimmerma/ecm.git
-cd ecm
-make ecm
+git clone https://gitlab.inria.fr/zimmerma/ecm.git cpu_ecm
+cd cpu_ecm
+sed -i "1 s/-dev//" configure.ac
+autoreconf -i
+./configure --prefix=$HOME/ecm-install/7.0.6/
+make
+sudo make install
+cd ~
 
 # ytools (yafu)
 git clone https://github.com/bbuhrow/ytools.git
@@ -116,7 +137,25 @@ cd ~
 
 # yafu
 git clone https://github.com/bbuhrow/yafu.git
+# known working commit
+git checkout 93a23e5
 cd yafu
-make NFS=1 USE_AVX2=1 USE_BMI2=1
+make COMPILER=gcc NFS=1 USE_AVX2=1 USE_BMI2=1
+cd ~
 
+
+
+# pari/gp
+sudo apt-get install -y libreadline6-dev
+
+
+PARIVERSION="2.15.5"
+wget https://pari.math.u-bordeaux.fr/pub/pari/unix/pari-$PARIVERSION.tar.gz
+tar -xzf pari-$PARIVERSION.tar.gz
+rm pari-$PARIVERSION.tar.gz
+cd pari-$PARIVERSION
+./Configure --with-gmp --with-readline
+sudo make install
+cp misc/gprc.dft ~/.gprc
+sed -i -E 's/\\\\   #ifnot EMACS colors = \"darkbg\"/   #ifnot EMACS colors = \"darkbg\"/' ~/.gprc
 cd ~
