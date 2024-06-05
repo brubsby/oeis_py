@@ -14,6 +14,7 @@ export ECM_PATH=~/ecm
 export PATH="\$PATH:/mnt/c/GitProjects/t-level/dist"
 export PYTHONPATH="\$PYTHONPATH:/mnt/c/GitProjects/oeis"
 alias t-level="python3 /mnt/c/GitProjects/t-level/t_level.py"
+alias yafu="~/yafu/yafu"
 shopt -s histappend
 HISTCONTROL=ignoredups:erasedups:ignorespace
 export HISTSIZE=
