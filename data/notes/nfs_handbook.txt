@@ -72,13 +72,13 @@ cd ~/msieve_nfsathome
 1. start server with:
 k=800; composite_name="v2.-1.$k"; equivalent_digits=140; N=
 python3 cado-nfs.py -t 16 -w "$HOME/cado-nfs/$composite_name" $N server.whitelist=0.0.0.0/0 server.port=9999 server.ssl=no
-2. start clients with, http if no ssl, https if ssl, C145+ should be 4-threaded, or I=14=4 threads, I=15=8 thrreads
-python3 cado-nfs-client.py --server=http://localhost:9999 --override t 3
+2. start clients with, http if no ssl, https if ssl, C145+ should be 4-threaded, or I=14=4 threads, I=15=8 threads
+python3 cado-nfs-client.py -d --server=http://localhost:9999 --override t 2
 
 
 ## CADO-NFS SNFS:
 # generate the poly with yafu or the pari/gp code in generalized_lucas_snfs_poly.txt
-cd ~/cado-nfs; k=926; composite_name="v2.-1.$k"; equivalent_digits=125;
+cd ~/cado-nfs; l="v"; p="2"; q="-1"; k="616"; composite_name="$l$p.$q.$k"; equivalent_digits=145;
 polyfile=c$equivalent_digits.poly; paramfile=params.c$equivalent_digits
 mkdir -p $composite_name
 nano ~/cado-nfs/$composite_name/$polyfile
@@ -107,13 +107,13 @@ tasks.polyselect.import = $composite_name/$polyfile
 tasks.sieve.sqside = 0
 " >> ~/cado-nfs/$composite_name/$paramfile
 cd ~/cado-nfs
-python3 cado-nfs.py -t 16 -w "$HOME/cado-nfs/$composite_name" $composite_name/$paramfile server.whitelist=0.0.0.0/0 server.port=9999 server.ssl=no slaves.hostnames=localhost slaves.scriptpath=$HOME/cado-nfs/build/$(hostname) --slaves 0
+python3 cado-nfs.py -t 16 -w "$HOME/cado-nfs/$composite_name" $composite_name/$paramfile server.port=9999 server.whitelist=0.0.0.0/0 server.ssl=no slaves.hostnames=localhost slaves.scriptpath=$HOME/cado-nfs/build/$(hostname) --slaves 0
 
 
 
 ## CADO-NFS into GPU MSieve LA: https://www.mersenneforum.org/showpost.php?p=655467&postcount=15
 # sometimes CADO has an error during LA, so running LA on Msieve GPU works better (and also it's just faster)
-cd ~/cado-nfs; k=886; composite_name="v2.-1.$k"; equivalent_digits=125;
+cd ~/cado-nfs; l="v"; p="2"; q="-1"; k="789"; composite_name="$l$p.$q.$k"; equivalent_digits=145;
 polyfile=c$equivalent_digits.poly; paramfile=params.c$equivalent_digits
 cd ~/cado-nfs/$composite_name
 rm ~/msieve_nfsathome/msieve.*

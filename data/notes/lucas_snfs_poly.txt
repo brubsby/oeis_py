@@ -1,3 +1,5 @@
+\\gp /mnt/c/GitProjects/oeis/data/notes/lucas_snfs_poly.txt
+
 \\ https://www.mersenneforum.org/showthread.php?t=23895
 
 assert(predicate,err)=if(!cond,error(err));
@@ -17,20 +19,21 @@ debruijnxi(x)={
         m = (left + right) / 2;
         if (exp(m) - 1 > x * m, right = m, left = m)
     );
-    (left + right) / 2
+    return((left + right) / 2);
 };
 addhelp(debruijnxi, "debruijnxi(x): Helper function for rhoest.  Finds a xi such that e^xi - 1 = x * xi.");
 
 rhoest(x)={
     my(xi = debruijnxi(x));
     \\exp(Euler) / sqrt(2 * Pi * x) * exp(1 - exp(xi) + intnum(s = eps(), xi, (exp(s) - 1) / s))
-    exp(-eint1(-xi) - x * xi) / sqrt(2 * Pi * x) / xi
+    return(exp(-eint1(-xi) - x * xi) / sqrt(2 * Pi * x) / xi)
 };
 addhelp(rhoest, "de Bruijn's asymptotic approximation for rho(x), rewritten as in van de Lune and Wattel 1969.  Curiously, their paper shows values for this estimate that differ from those calculated by this function, often as soon as the second decimal place -- but as the difference is in the direction of the true value, I have not looked further into this.");
 
 
 rhoTable = [1, 3.068528194e-1, 4.860838829e-2, 4.910925648e-3, 3.547247005e-4, 1.964969635e-5, 8.745669953e-7, 3.232069304e-8, 1.016248283e-9, 2.770171838e-11, 6.644809070e-13, 1.419713165e-14, 2.729189030e-16, 4.760639989e-18, 7.589908004e-20];
 dickmanrho(x)={
+    my(x=real(x));
     local(left, right, scale);
     if (x <= 2, return (1 - log(max(x, 1))));
     if (x <= 3, return(
@@ -58,7 +61,7 @@ dickmanrho(x)={
     scale = left + (right - left) * (x - floor(x));
 
     \\ Return a result based on the scale factor and the asymptotic formula.
-    precision(rhoest(x) * scale, 9)
+    return(precision(rhoest(x) * scale, 9));
 };
 addhelp(dickmanrho, "Estimates the value of the Dickman rho function. For x <= 3 the exact values are used, up to rounding; up to "#rhoTable" the value is interpolated using known values and rhoest; after "#rhoTable" rhoest is used, along with a correction factor based on the last value in rhoTable.");
 
@@ -130,7 +133,8 @@ get_alpha(poly, B) = {
 
 polyscore(pols, skew) = {
     \\unfortunately the murphy scores seem off for the moment, resort to coefficient sums
-    return(vecsum(abs(Vec(pols[1]))));
+    \\return(vecsum(abs(Vec(pols[1]))));
+    if(skew == 0, skew = calculate_skew(pols));
     \\ defaults taken from cado-nfs muprhy score calculation
     bound_f = 1e7;
     bound_g = 5e6;
@@ -162,8 +166,7 @@ polyscore(pols, skew) = {
 }
 
 \\ lucas2.gp
-{
-        lucas2(k,P,Q,     n,s,j,Ql,Qh,Uh,Vl,Vh) =
+lucas2(k,P,Q,     n,s,j,Ql,Qh,Uh,Vl,Vh) = {
         n = floor(log(k)/log(2)) + 1;
         s = 0;
         while( bittest(k,s) == 0, s = s + 1 );
@@ -192,7 +195,7 @@ polyscore(pols, skew) = {
                 Vl = Vl * Vl - 2 * Ql;
                 Ql = Ql * Ql;
         );
-        [Uh,Vl]
+        return([Uh,Vl]);
 }
 U(p,q,n)=lucas2(n,p,q)[1];
 V(p,q,n)=lucas2(n,p,q)[2];
@@ -213,8 +216,10 @@ plindep(N,d,x,y,comment) = {
 }
 
 snfs_difficulty(pols) ={
-    my(x=-polcoef(pols[2],0)/polcoef(pols[2],1));
-    return(real(log(polcoef(pols[2],1)^poldegree(pols[1])*eval(pols[1]))/log(10)));
+    my(x=-polcoef(pols[2],0)/polcoef(pols[2],1),
+       val=polcoef(pols[2],1)^poldegree(pols[1])*eval(pols[1]));
+    if(val==0, return(99999999999));
+    return(log(abs(val))/log(10));
 }
 
 gnfs_difficulty(pols) = {
@@ -241,7 +246,7 @@ printpoly(pols) = {
         printf("type: snfs\nn: %d\nskew: %.02f\n", N, skew);
         for (i = 0, d, if(polcoef(pols[1],i) != 0, printf("c%d: %d\n", i, polcoef(pols[1],i))));
         printf("Y0: %d\nY1: %d\n\n", polcoef(pols[2],0), polcoef(pols[2],1));
-    )
+    );
 }
 
 invert(pols) = [Polrev(Vec(pols[1])), Polrev(Vec(pols[2])), pols[3], pols[4]];
@@ -270,11 +275,11 @@ jiggle(pols) = {
     retpolys = List([pols, invpols]);
     for(i=1,5,
         retpolys = concat(retpolys, List([subxk(pols, i), subxk(invpols, i), subxk(pols, -i), subxk(invpols, -i)])));
-    return(retpolys)
+    return(retpolys);
 }
 
 \\public api, implemented first for V case, will have to adjust for U case
-polygen(isu, p,q,k,composite=0) = {
+polygen(isu, p,q,k,composite=0, printpolys=0) = {
     seqf = if(isu, U, V);
     parentN = seqf(p,q,k);
     has3 = k % 3 == 0;
@@ -284,7 +289,7 @@ polygen(isu, p,q,k,composite=0) = {
     has13 = k % 13 == 0;
     has9 = k % 9 == 0;
     paramsvec = List();
-    if((k-2)%4==0 && !isu,
+    if((k-2)%4==0 && !isu && p==2 && q==-1,
             n = (k-2)\4;
             n_h = 2*n+1;
             foreach([-1, 1], c,
@@ -311,7 +316,7 @@ polygen(isu, p,q,k,composite=0) = {
             d = 8;
             y1 = 1;
             y0 = seqf(p,q,2*k\o); \\ TODO double check this works, probably needs a different constant
-            print("WARNING: 3 * 5 divisibility case could maybe be improved");
+            \\print("WARNING: 3 * 5 divisibility case could maybe be improved");
             paramsvec = concat(paramsvec, [N, d, y1, y0, "15 divisibility case"]));
     if(has3 && has7,
             o = 21;
@@ -360,22 +365,38 @@ polygen(isu, p,q,k,composite=0) = {
                             result_polys = concat(result_polys, jiggle(plindep(N, d, y1, y0, comment))));
     for(i=1, #result_polys, result_polys[i] = concat(concat(result_polys[i], snfs_difficulty(result_polys[i])), polyscore(result_polys[i])));
     result_polys = vecsort(result_polys, polysortcmp, 8);
+    if(printpolys, apply(printpoly, Vecrev(result_polys)));
     return(result_polys);
 }
 
 
-polygenu(p, q, k, composite=0) = polygen(1, p, q, k, composite);
-polygenv(p, q, k, composite=0) = polygen(0, p, q, k, composite);
+polygenu(p, q, k, composite=0, printpolys=0) = polygen(1, p, q, k, composite, printpolys);
+polygenv(p, q, k, composite=0, printpolys=0) = polygen(0, p, q, k, composite, printpolys);
 
 polyfind(isu, p, q, k, composite=0, numpolys=10) = {
     result_polys = polygen(isu, p, q, k, composite);
     final_polys = Vecrev(result_polys[1..numpolys]);
     apply(printpoly, final_polys);
-    return(final_polys);
+    return();
 }
 
 polyfindu(p, q, k, composite=0, numpolys=10) = polyfind(1, p, q, k, composite, numpolys);
 polyfindv(p, q, k, composite=0, numpolys=10) = polyfind(0, p, q, k, composite, numpolys);
+
+mindifficulty(isu, p, q, k, composite=0) = {
+    return(vecmin(Vec(apply(gnfs_difficulty, polygen(isu, p, q, k, composite)))));
+}
+
+mindifficultyu(p, q, k, composite=0) = mindifficulty(1, p, q, k, composite);
+mindifficultyv(p, q, k, composite=0) = mindifficulty(0, p, q, k, composite);
+
+snfsbetter(isu, p, q, k, composite) = {
+    assert(composite <= 0, "remaining composite must be given to determine if GNFS or SNFS is better");
+    return(mindifficulty(isu, p, q, k, composite) < #digits(composite));
+}
+
+snfsbetteru(p, q, k, composite) = snfsbetter(1, p, q, k, composite);
+snfsbetterv(p, q, k, composite) = snfsbetter(0, p, q, k, composite);
 
 polysortcmp(x, y) = {
     coef_diff = vecsum(abs(Vec(x[1]))) - vecsum(abs(Vec(y[1])));
@@ -406,18 +427,20 @@ polysortcmp(x, y) = {
 \\7: 260?
 \\8: 260?
 degree_distance(deg, difficulty) = {
-    if( deg == 4, zone_distance(difficulty, 0, 100),
-        deg == 5, zone_distance(difficulty, 100, 200),
-        deg == 6, zone_distance(difficulty, 200, 260),
-        zone_distance(difficulty, 260, 1000))
+    return(
+        if( deg == 4, zone_distance(difficulty, 0, 100),
+            deg == 5, zone_distance(difficulty, 100, 200),
+            deg == 6, zone_distance(difficulty, 200, 260),
+            zone_distance(difficulty, 260, 1000)));
 }
 
 \\ helper for above function, just outputs 0 if in the bounds or distance to the closest bound if not
 \\ assumes positive inputs
 zone_distance(value, low_bound, high_bound) = {
-    if(value < low_bound, low_bound - value,
-       value > high_bound, value - high_bound,
-       0)
+    return(
+        if(value < low_bound, low_bound - value,
+           value > high_bound, value - high_bound,
+           0));
 }
 
 \\Regarding poly selection for indices divisible by 3: for CPell(3n)/CPell(n), you can use the usual lindep method, but as the number is similar in size to CPell(2n) you should pick Y0 and Y1 accordingly. Only even degrees will be possible.
