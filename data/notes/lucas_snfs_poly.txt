@@ -133,7 +133,7 @@ get_alpha(poly, B) = {
 
 polyscore(pols, skew) = {
     \\unfortunately the murphy scores seem off for the moment, resort to coefficient sums
-    \\return(vecsum(abs(Vec(pols[1]))));
+    return(vecsum(abs(Vec(pols[1]))));
     if(skew == 0, skew = calculate_skew(pols));
     \\ defaults taken from cado-nfs muprhy score calculation
     bound_f = 1e7;
