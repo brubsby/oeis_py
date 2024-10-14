@@ -150,7 +150,7 @@ class OEISFactorDB:
         return result
 
     def parse_wiki_page(self):
-        page_request = requests.get("https://oeis.org/w/index.php?title=OEIS_sequences_needing_factors&stable=0")
+        page_request = requests.get("https://oeis.org/wiki/OEIS_sequences_needing_factors?stable=0")
         page_content = page_request.content
         parsed = html.fromstring(page_content)
         text = parsed.text_content()
@@ -276,9 +276,9 @@ class OEISFactorDB:
             # multiple new composites (not likely to happen)
             raise NotImplementedError(f"Multiple composites found in place of old composite:\nold:{old_composite}\nnew={remaining_composites}")
 
-    def get_easiest_composite(self, digit_limit=500, threads=1):
+    def get_easiest_composite(self, digit_limit=500, pretest=0.3, threads=1):
         cur = self.cursor()
-        cur.execute(f"SELECT id, value, t_level, expression, digits FROM composite WHERE digits < ? ORDER BY t_level ASC, digits ASC", (digit_limit,))
+        cur.execute(f"SELECT id, value, t_level, expression, digits FROM composite WHERE digits < ? AND t_level < (digits * ?) ORDER BY t_level ASC, digits ASC", (digit_limit, pretest))
         result = cur.fetchall()
         tuples = list(map(lambda row: (self.get_ecm_time(int(row['digits']), int(row['t_level']), ((int(row['t_level']) // 5) + 1) * 5, threads=threads), row), result))
         tuples = sorted(tuples, key=lambda x: x[0])
@@ -286,17 +286,26 @@ class OEISFactorDB:
             if self.validate_stored_composite_unfactored(composite_row['value']):
                 return composite_row, completion_time
             else:
-                return self.get_easiest_composite(digit_limit=digit_limit, threads=threads)
+                return self.get_easiest_composite(digit_limit=digit_limit, pretest=pretest, threads=threads)
 
-    def get_smallest_composite(self, digit_limit=500):
+    def get_smallest_t_level_composite(self, digit_limit=500):
         cur = self.cursor()
-        cur.execute(f"SELECT id, value, t_level, expression, digits FROM composite WHERE digits < ? ORDER BY digits ASC", (digit_limit,))
+        cur.execute(f"SELECT id, value, t_level, expression, digits FROM composite WHERE digits < ? ORDER BY t_level ASC, digits ASC", (digit_limit,))
+        composite_row = cur.fetchone()
+        if self.validate_stored_composite_unfactored(composite_row['value']):
+            return composite_row
+        else:
+            return self.get_smallest_t_level_composite(digit_limit=digit_limit)
+
+    def get_smallest_composite(self, digit_limit=500, pretest=0.3):
+        cur = self.cursor()
+        cur.execute(f"SELECT id, value, t_level, expression, digits FROM composite WHERE digits < ? AND t_level < (digits * ?) ORDER BY digits ASC", (digit_limit, pretest))
         result = cur.fetchall()
         for composite_row in result:
             if self.validate_stored_composite_unfactored(composite_row['value']):
                 return composite_row
             else:
-                return self.get_smallest_composite(digit_limit=digit_limit)
+                return self.get_smallest_composite(digit_limit=digit_limit, pretest=pretest)
 
     def get_ecm_time(self, digits, start_work, end_work, threads=1):
         b1, curves = yafu.get_b1_curves(start_work, end_work)

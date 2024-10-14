@@ -171,6 +171,8 @@ _fn = {
     "all": lambda *a: all(a),
     "Fibonacci": gmpy2.fib,
     "fibonacci": gmpy2.fib,
+    "U": gmpy2.lucasu,
+    "V": gmpy2.lucasv,
     "F": gmpy2.fib,
     "Fib": gmpy2.fib,
     "fib": gmpy2.fib,

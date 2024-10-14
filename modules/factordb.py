@@ -1,10 +1,13 @@
-import urllib
+import sys
+import time
 
 import requests
 import gmpy2
 
 
+REPORT_ENDPOINT = "http://factordb.com/report.php"
 ENDPOINT = "http://factordb.com/api"
+session = requests.Session()
 
 
 class FactorDB():
@@ -12,11 +15,23 @@ class FactorDB():
         self.n = n
         self.result = None
 
-    def connect(self, reconnect=False):
+    def connect(self, reconnect=False, sleep=1):
         if self.result and not reconnect:
             return self.result
-        self.result = requests.get(ENDPOINT, params={"query": str(self.n)})
+        try:
+            self.result = session.get(ENDPOINT, params={"query": str(self.n)})
+        except requests.exceptions.ConnectionError:
+            time.sleep(sleep)
+            return self.connect(reconnect, sleep * 2)
         return self.result
+
+    def requery(self):
+        return self.connect(reconnect=True)
+
+    def get_json(self):
+        if self.result:
+            return self.result.json()
+        return None
 
     def get_id(self):
         if self.result:
@@ -33,7 +48,7 @@ class FactorDB():
             return self.result.json().get("factors")
         return None
 
-    def is_prime(self, include_probably_prime=False):
+    def is_prime(self, include_probably_prime=True):
         if self.result:
             status = self.result.json().get("status")
             return status == 'P' or (status == 'PRP' and include_probably_prime)
@@ -48,13 +63,19 @@ class FactorDB():
         if not factors:
             return None
         ml = [[gmpy2.mpz(x)] * y for x, y in factors]
-        return [y for x in ml for y in x]
+        return sorted([y for x in ml for y in x])
 
 
-def report(composite, factors):
-    payload = "\n".join(["{}={}".format(composite, str(factors))])
-    payload = 'report=' + urllib.parse.quote(payload, safe='') + '&format=0'
-    payload = payload.encode('utf-8')
-    temp2 = urllib.request.urlopen('http://factordb.com/report.php', payload)
-    if temp2.status != 200:
-        raise Exception(temp2)
+
+def report(composite_to_factors_dict, sleep=1):
+    payload = {
+        "report": "\n".join([f"{int(composite)}={list(map(int, factors))}" for composite, factors in composite_to_factors_dict.items()]),
+        "format": "0"
+    }
+    try:
+        response = session.get(REPORT_ENDPOINT, params=payload)
+        return response
+    except Exception as e:
+        print(e, file=sys.stderr)
+        time.sleep(sleep)
+        return report(composite_to_factors_dict, sleep=sleep*2)

@@ -4,7 +4,7 @@ import logging
 
 import gmpy2
 
-from modules import primetest
+from modules import prime
 from sequence import Sequence
 
 
@@ -18,7 +18,7 @@ class A100496(Sequence):
         for k in itertools.count(start=k):
             self.checkpoint(k, k, n=n)
             val = pow(pow(gmpy2.mpz(2), k) + 1, 4) - 2
-            if primetest.is_prime(val):
+            if prime.is_prime(val):
                 self.delete_checkpoint(n=n)
                 return k
 

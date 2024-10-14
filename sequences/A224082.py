@@ -1,7 +1,7 @@
 import itertools
 import sys
 import logging
-from modules import primetest
+from modules import prime
 
 from sequence import Sequence
 import A112141
@@ -17,7 +17,7 @@ class A224082(Sequence):
         for k in itertools.count(start=k):
             self.checkpoint(k, k, n=n)
             val = A112141(k) - 1
-            if primetest.is_prime(val) in [1, 2]:
+            if prime.is_prime(val) in [1, 2]:
                 self.delete_checkpoint(n=n)
                 return k
 

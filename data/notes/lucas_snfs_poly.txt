@@ -325,21 +325,23 @@ polygen(isu, p,q,k,composite=0, printpolys=0) = {
             y1 = 1;
             y0 = seqf(p,q,2*k\o);
             paramsvec = concat(paramsvec, [N, d, y1, y0, "21 divisibility case"]));
-    if(has3 || has5 || has7 || has11 || has 13, \\ other simple divisibilities
-            f = factor(k,13);
+    if(has3 || has5 || has7 || has11 || has13, \\ other simple divisibilities
             ovec = [];
-            if(has3, ovec = concat(ovec, 3),
-               has5, ovec = concat(ovec, 5),
-               has7, ovec = concat(ovec, 7),
-               has11, ovec = concat(ovec, 11),
-               has13, ovec = concat(ovec, 13));
+            if(has3, ovec = concat(ovec, 3));
+            if(has5, ovec = concat(ovec, 5));
+            if(has7, ovec = concat(ovec, 7));
+            if(has11, ovec = concat(ovec, 11));
+            if(has13, ovec = concat(ovec, 13));
             for( j = 1, #ovec, o = ovec[j];
                                N = seqf(p,q,k)\seqf(p,q,k\o);
-                               d = eulerphi(o);
-                               dvec = if(eulerphi(o)==2, [4,6,8], [d]);
+                               dp = eulerphi(o);
+                               dvec = if(dp==2, [4,6,8], dp>8, [dp\2], dp>6, [dp, dp\2], [dp]);
                                for(i = 1, #dvec, d = dvec[i];
-                                   paramsvec = concat(paramsvec, [N, d, seqf(p,q,(o-1)*k\o\d+1), seqf(p,q,(o-1)*k\o\d), strprintf("%d divisibility case", o)]);
-                                   paramsvec = concat(paramsvec, [N, d, seqf(p,q,(o-1)*k\o\d+1), seqf(p,q,(o-1)*k\o\d-1), strprintf("%d divisibility case", o)]);
+                                   paramsvec = concat(paramsvec, [N, d, U(p,q,(o-1)*k\o\d+1), U(p,q,(o-1)*k\o\d), strprintf("%d divisibility case", o)]);
+                                   paramsvec = concat(paramsvec, [N, d, U(p,q,(o-1)*k\o\d+1), U(p,q,(o-1)*k\o\d-1), strprintf("%d divisibility case", o)]);
+                                   paramsvec = concat(paramsvec, [N, d, V(p,q,(o-1)*k\o\d+1), V(p,q,(o-1)*k\o\d), strprintf("%d divisibility case", o)]);
+                                   paramsvec = concat(paramsvec, [N, d, V(p,q,(o-1)*k\o\d+1), V(p,q,(o-1)*k\o\d-1), strprintf("%d divisibility case", o)]);
+                                   paramsvec = concat(paramsvec, [N, d, 1, U(p,q,k\o), strprintf("%d divisibility case", o)]);
                                    paramsvec = concat(paramsvec, [N, d, 1, V(p,q,k\o), strprintf("%d divisibility case", o)]))));
 
     if(1, \\ prime or composite with no small factors case
@@ -462,3 +464,28 @@ zone_distance(value, low_bound, high_bound) = {
 \\All other combinations of factors do not yield viable SNFS polynomials. For example, divisibility by 17 gives an octic but this will sieve slower than the sextic you get without dividing out the factor. Divisibility by 3 and 11 gives a degree 10 polynomial which is hopeless.
 
 \\TODO https://www.mersenneforum.org/showthread.php?p=453018&highlight=lucas#post453018
+
+
+\\k = 520
+\\p = 2
+\\q = -1
+\\f = factor(k,13);
+\\o = 13
+\\N = V(p,q,k)\V(p,q,k\o)
+\\d = 6
+\\x = V(p,q,d*k\o\d+1)
+\\y = V(p,q,d*k\o\d)
+\\result = plindep(N,d,x,y)
+\\printpoly(N, result)
+\\jiggle(N, result)
+\\x = 1
+\\y = V(p,q,k\o)
+\\result = plindep(N,d,x,y)
+\\printpoly(N, result)
+\\jiggle(N, result)
+\\x = U(p,q,(o-1)*k\o\d+1)
+\\y = U(p,q,(o-1)*k\o\d)
+\\result = plindep(N,d,x,y)
+\\printpoly(N, result)
+\\jiggle(N, result)
+

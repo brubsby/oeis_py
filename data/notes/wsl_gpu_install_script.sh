@@ -26,6 +26,7 @@ EOF
 source ~/.bashrc
 
 sudo apt-get update
+sudo apt-get upgrade
 sudo apt-get install build-essential libtool autoconf libprimesieve-dev libgsl-dev
 # for ggnfs
 sudo apt-get install g++ m4 zlib1g-dev make p7zip
@@ -100,7 +101,7 @@ cd ~
 sudo apt-get install subversion
 svn co https://svn.code.sf.net/p/msieve/code/trunk msieve
 cd msieve
-make all
+make all NO_ZLIB=1 ECM=1 VBITS=128
 
 
 # gmp for yafu (not necessary as long as the apt-get version works)
@@ -139,8 +140,8 @@ cd ~
 # yafu
 git clone https://github.com/bbuhrow/yafu.git
 # known working commit
-git checkout 93a23e5
 cd yafu
+git checkout 93a23e5
 make COMPILER=gcc NFS=1 USE_AVX2=1 USE_BMI2=1
 cd ~
 

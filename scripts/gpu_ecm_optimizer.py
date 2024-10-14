@@ -251,9 +251,9 @@ def optimize_t(starting_t_level, GPU_SPEEDUP, CPU_CORES, composite):
 
 
 def optimize():
-    COMPOSITE = 681658524392207446192037890170477872723580232470917372041858514001900577478765013911985680614224286497551984613118759893360710746955560053808840487248520050257163169179195900413093412503054109876114693342065713724991085560056945861046999203519257184259308018811
+    COMPOSITE = 896959634134972954932097433354396249363477723671476996019638656117655082599141362993040450203221935948600503154525469723880459008150662745804124930775012344709491444374672552067734993
     GPU_CORES = 8192
-    CPU_CORES = 12
+    CPU_CORES = 16
     GPU_SPEEDUP = load_B1_timing(COMPOSITE) / load_GPU_B1_timing(COMPOSITE, GPU_CORES)
     print(GPU_SPEEDUP)
     UPPER_SEP = "|-------------------|-----------------------------------------------------------------------------------------------------------|"
@@ -263,7 +263,7 @@ def optimize():
     print(LOWER_SEP)
     print(      "| stg-1-t | stg-2-t |    optimal B1 |          optimal B2 |B2/B1 ratio| curves |  stage-1 time |  stage-2 time |     total time |")
     print(LOWER_SEP)
-    t_total = 40
+    t_total = 10
     sum_time = 0
     while t_total < 80:
         _, _, t_total, rowtime = optimize_t(t_total, GPU_SPEEDUP, CPU_CORES, COMPOSITE)

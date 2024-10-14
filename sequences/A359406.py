@@ -1,6 +1,6 @@
 import itertools
 import sys
-import modules.primetest as primetest
+import modules.prime as prime
 import logging
 
 import primesieve
@@ -25,7 +25,7 @@ class A359406(Sequence):
             concat_str += str(p)
             if k <= lastk:
                 continue
-            if primetest.is_prime(concat_str):
+            if prime.is_prime(concat_str):
                 return k
             self.checkpoint(k, k, n=n, total=False)
 

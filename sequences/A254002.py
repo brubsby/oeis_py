@@ -3,7 +3,7 @@ import sys
 import gmpy2
 
 from sequence import Sequence
-import modules.primetest as primetest
+import modules.prime as prime
 
 class A254002(Sequence):
 
@@ -17,12 +17,12 @@ class A254002(Sequence):
         for k in itertools.count(start=k):
             val = 46*(term-1)//99+1
             self.checkpoint(k, n=n)
-            trial_div_result = primetest.trial_div_prime_test(val)
+            trial_div_result = prime.trial_div_prime_test(val)
             if trial_div_result == 2:
                 self.delete_checkpoint(n)
                 return n
             elif trial_div_result == -1:
-                if primetest.prp_test_pfgw(f"46*(100^{k}-1)/99+1"):
+                if prime.prp_test_pfgw(f"46*(100^{k}-1)/99+1"):
                     self.delete_checkpoint(n)
                     return n
             term *= 100

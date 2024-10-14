@@ -92,6 +92,11 @@ def factordb_is_semi(n, num_retries=10, sleep_time=5, trial_div_limit=None):
     if status in ['Unit', 'Zero']:
         return DEFINITE_NOT_SEMIPRIME
     factors = f.get_factor_list()
+    if factors is None:
+        logging.info(
+            f"Sleeping for {sleep_time} seconds after no factors were found for value: {n}")
+        time.sleep(sleep_time)
+        return factordb_is_semi(n, num_retries=num_retries-1, sleep_time=sleep_time*2)
     num_factors = len(factors)
     if status in ["FF"]:
         if num_factors == 2:

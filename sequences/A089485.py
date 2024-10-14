@@ -4,7 +4,7 @@ import logging
 
 import gmpy2
 
-from modules import semiprime, primetest
+from modules import semiprime, prime
 from sequence import Sequence
 
 
@@ -22,8 +22,8 @@ class A089485(Sequence):
             k = gmpy2.mpz(k)
             m = k * 2 + 1
             # val = pow(m, four) + pow(four, m)
-            is_semi = primetest.is_prime(
-                abs(pow(m, two) + m * pow(two, k + 1) + pow(two, m))) and primetest.is_prime(
+            is_semi = prime.is_prime(
+                abs(pow(m, two) + m * pow(two, k + 1) + pow(two, m))) and prime.is_prime(
                 abs(pow(m, two) - m * pow(two, k + 1) + pow(two, m)))
             # is_semi = semiprime.is_semi(val)
             if is_semi:

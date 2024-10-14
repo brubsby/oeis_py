@@ -1,7 +1,7 @@
 import itertools
 import logging
 import sys
-import modules.primetest as primetest
+import modules.prime as prime
 
 from sequence import Sequence
 
@@ -20,7 +20,7 @@ class A176942(Sequence):
             if len(concat_str) >= k:
                 concat_str += str(i)
                 i += 1
-            if primetest.is_prime(concat_str[:k]):
+            if prime.is_prime(concat_str[:k]):
                 self.delete_checkpoint(n=n)
                 return k
             self.checkpoint(k, k, n=n, total=False)

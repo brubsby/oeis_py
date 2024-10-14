@@ -4,7 +4,7 @@ import logging
 
 import gmpy2
 
-from modules import primetest, semiprime
+from modules import prime, semiprime
 from sequence import Sequence
 import A278637
 

@@ -13,6 +13,7 @@ for row in read_prime_difficulty_txt():
     # remove "n=" from list of primes and convert to int list
     kamada_sequence = list(map(int, row['(probable) prime numbers'][2:].split(",")))
     sequence = kamada_sequence
+    kamada_search_limit = int(row['range'][3:]) if row['range'] else None
     results = query_sequence_from_name(row['oeis'])
     if not results:
         message = "doesn't exist"
@@ -26,6 +27,8 @@ for row in read_prime_difficulty_txt():
         kamada_set = set(kamada_sequence)
         kamada_update = oeis_set.difference(kamada_set)
         oeis_update = kamada_set.difference(oeis_set)
+        # filter out the disjoint results, i.e. the primes that are greater than the search limit
+        oeis_update = list(filter(lambda x: x <= kamada_search_limit, oeis_update))
         message = ""
         # if kamada_update:
         #     message += f"update kamada {sorted(kamada_update)} "

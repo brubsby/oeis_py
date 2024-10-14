@@ -62,8 +62,8 @@ class Sequence:
     def calculate(self, n):
         raise NotImplementedError
 
-    def list(self, n):
-        return [self(i) for i in range(self.start_index, n + 1)]
+    def list(self, n, start=None):
+        return [self(i) for i in range(self.start_index if start is None else start, n + 1)]
 
     def generate(self, start=None, alert_time=None, quit_on_alert=False):
         last = time.time() - 0.01
@@ -136,7 +136,7 @@ class Sequence:
             for n, val in enumerator:
                 strval = str(val)
                 strval_len = len(strval)
-                if strval_len > term_digit_length_limit:
+                if term_digit_length_limit and strval_len > term_digit_length_limit:
                     line = f"# a({n}) is {strval_len} digits (larger than the {term_digit_length_limit} digit soft limit)\n"
                     bfile.write(line)
                     logging.info(line[:-1])
@@ -146,7 +146,7 @@ class Sequence:
                 line = f"{n} {strval}\n"
                 bfile.write(line)
                 logging.info(line[:-1])
-                if n+1 > max_n:
+                if max_n and n+1 > max_n:
                     break
 
     # 260 is usually the max character length for the data section

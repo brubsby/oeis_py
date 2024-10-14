@@ -4,7 +4,7 @@ import logging
 
 import gmpy2
 
-from modules import primetest, semiprime
+from modules import prime, semiprime
 from sequence import Sequence
 
 
@@ -18,7 +18,7 @@ class A278637(Sequence):
         for k in itertools.count(start=k):
             self.checkpoint(k, k, n=n, cooldown=None)
             fib1 = gmpy2.fib(k)
-            if primetest.is_prime(fib1) in [1, 2] or semiprime.is_semi(fib1) in [1, 2]:
+            if prime.is_prime(fib1) in [1, 2] or semiprime.is_semi(fib1) in [1, 2]:
                 self.delete_checkpoint(n=n)
                 return k
 

@@ -1,0 +1,37 @@
+
+# get all composites from oeis list in order
+python -c "from modules import oeis_factor_db; [print(val) for val in list(map(lambda x: str(x['value']), oeis_factor_db.OEISFactorDB().get_all_composites()))]" | awk '{ print length($0), $0; }' | sort -n | cut -d' ' -f2-
+
+# bash one liner to convert stdin numbers into hex:
+python -c "import sys;[print(hex(int(line))[2:]) for line in sys.stdin.readlines()]"
+
+# oeis composite list batchgcd:
+cd /mnt/c/GitProjects/oeis/scripts; python -c "from modules import oeis_factor_db; [print(val) for val in list(map(lambda x: str(x['value']), oeis_factor_db.OEISFactorDB().get_all_composites()))]" | awk '{ print length($0), $0; }' | sort -n | cut -d' ' -f2- | python -c "import sys;[print(hex(int(line))[2:]) for line in sys.stdin.readlines()]" > ~/fastgcd/input.moduli; cd ~/fastgcd/; ./fastgcd input.moduli; paste vulnerable_moduli gcds | python -c "import sys;[print(' '.join([str(int(term, 16)) for term in line.split('\t')])) for line in sys.stdin.readlines()]" | awk '{if ($1 != $2) print $1"=["$2"]"}' | clip.exe
+
+# version through the generalized lucas appender for some reason:
+cd /mnt/c/GitProjects/oeis/scripts; python -c "from modules import oeis_factor_db; [print(val) for val in list(map(lambda x: str(x['value']), oeis_factor_db.OEISFactorDB().get_all_composites()))]" | awk '{ print length($0), $0; }' | sort -n | cut -d' ' -f2- | tee ~/fastgcd/composites.input | python batch_gcd_generalized_lucas.py > ~/fastgcd/input.moduli; cd ~/fastgcd && ./fastgcd input.moduli && paste vulnerable_moduli gcds | python /mnt/c/GitProjects/oeis/scripts/process_fastgcd_output.py composites.input | clip.exe
+
+# convert all remaining generalized lucas composites into hex for batchgcd:
+find . -maxdepth 1 -name "*.dat" | xargs -I {} grep -Po '(?<=\()\d+(?=\))' "{}" | awk '{print length($1)" "$1}' | sort -n | uniq | awk '{print $2}' | python -c "import sys;[print(hex(int(line))[2:]) for line in sys.stdin.readlines()]" > ~/fastgcd/input.moduli
+
+cd ~/fastgcd
+./fastgcd input.moduli
+
+#check results
+paste vulnerable_moduli gcds | python -c "import sys;[print(' '.join([str(int(term, 16)) for term in line.split('\t')])) for line in sys.stdin.readlines()]" | awk '{if ($1 != $2) print $1" "$2}'
+
+
+
+# one liners:
+
+#composite only batchgcd
+cd /mnt/c/GitProjects/oeis/scripts; find . -maxdepth 1 -name "*.dat" | xargs -I {} grep -Po '(?<=\()\d+(?=\))' "{}" | awk '{print length($1)" "$1}' | sort -n | uniq | awk '{print $2}' | python -c "import sys;[print(hex(int(line))[2:]) for line in sys.stdin.readlines()]" > ~/fastgcd/input.moduli; cd ~/fastgcd/; ./fastgcd input.moduli; paste vulnerable_moduli gcds | python -c "import sys;[print(' '.join([str(int(term, 16)) for term in line.split('\t')])) for line in sys.stdin.readlines()]" | awk '{if ($1 != $2) print $1"=["$2"]"}' | clip.exe
+
+# add output of batch_gcd_generalized_lucas.py to batchgcd input
+cd /mnt/c/GitProjects/oeis/scripts; find . -maxdepth 1 -name "*.dat" | xargs -I {} grep -Po '(?<=\()\d+(?=\))' "{}" | awk '{print length($1)" "$1}' | sort -n | uniq | awk '{print $2}' | tee ~/fastgcd/composites.input | python batch_gcd_generalized_lucas.py > ~/fastgcd/input.moduli; cd ~/fastgcd && ./fastgcd input.moduli && paste vulnerable_moduli gcds | python /mnt/c/GitProjects/oeis/scripts/process_fastgcd_output.py composites.input | clip.exe
+
+# run batchgcd with every known prime seeding
+cd /mnt/c/GitProjects/oeis/scripts; find . -maxdepth 1 -name "*.dat" | xargs -I {} grep -Po '(?<=\()\d+(?=\))' "{}" | awk '{print length($1)" "$1}' | sort -n | uniq | awk '{print $2}' | tee ~/fastgcd/composite.inputs | python -c "import sys;[print(hex(int(line))[2:]) for line in sys.stdin.readlines()]" > ~/fastgcd/input.moduli; find . -maxdepth 1 -name "*.dat" | xargs -I {} grep -Po '(?<=(?:[\. ]))\d+(?=[\.$])' "{}" | awk '{print length($1)" "$1}' | sort -n | uniq | awk '{print $2}' | python -c "import sys;[print(hex(int(line))[2:]) for line in sys.stdin.readlines()]" >> ~/fastgcd/input.moduli; cd ~/fastgcd/; ./fastgcd input.moduli; paste vulnerable_moduli gcds | python /mnt/c/GitProjects/oeis/scripts/process_fastgcd_output.py composites.input | clip.exe
+
+# run batchgcd on factordb small composites and report:
+digitmin=87; digitmax=89; while read -r a; do while read -r b; do printf 'http://factordb.com/listtype.php?t=3&mindig=%d&perpage=5000&start=%d&download=1\n' "$a" "$b"; done < <(seq 0 5000 50000); done < <(seq $digitmin 1 $digitmax) | xargs -I {} curl -s '{}' | tee ~/tempcomps.txt | sed '/[^[:alnum:]_@]/d' | sort -n | uniq | python -c "import sys;[print(hex(int(line))[2:]) for line in sys.stdin.readlines()]" > ~/fastgcd/input.moduli; cd ~/fastgcd/; ./fastgcd input.moduli; paste vulnerable_moduli gcds | python -c "import sys;[print(' '.join([str(int(term, 16)) for term in line.split('\t')])) for line in sys.stdin.readlines()]" | awk '{if ($1 != $2) print $1"=["$2"]"}' | tee ~/tempresults.txt | jq -sRr @uri | xargs -I {} curl -s -G 'http://factordb.com/report.php?report={}&format=0' | lynx -dump -stdin -nolist -width=$(tput cols);

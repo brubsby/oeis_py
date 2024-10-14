@@ -40,6 +40,19 @@ def factorize(n, divisors=__trialdivisors, check_factor_db=True, threads=1, work
     return yafu.factor(n, threads=threads, work=work)
 
 
+def timed_factorize(n, timeout=1, divisors=__trialdivisors, threads=1):
+    if type(n) != gmpy2.mpz:
+        n = gmpy2.mpz(n)
+    if n < 2:
+        return []
+    if gmpy2.num_digits(n) < 20:
+        factors = trial_div_until(n, until=None, divisors=divisors)
+        fully_factored = prime.is_prime(factors[-1], trial_div_limit=None)
+        if fully_factored:
+            return factors
+    return yafu.factor(n, threads=threads)
+
+
 def distinct_factors(n, factors=None, threads=1, divisors=__trialdivisors, check_factor_db=True, work=None):
     if factors is None:
         factors = factorize(n, threads=threads, divisors=divisors, check_factor_db=check_factor_db, work=work)
@@ -128,7 +141,8 @@ def prime_signature(n, factors=None, divisors=__trialdivisors, check_factor_db=T
     return list(factor_dict.values())
 
 
-def smallest_prime_factor(n, divisors=__trialdivisors, check_factor_db=True, digit_limit=10):
+def smallest_prime_factor(n, divisors=__trialdivisors, check_factor_db=True, digit_limit=10, threads=1):
+    checked_factordb = False
     if type(n) != gmpy2.mpz:
         n = gmpy2.mpz(n)
     if n < 2:
@@ -136,16 +150,24 @@ def smallest_prime_factor(n, divisors=__trialdivisors, check_factor_db=True, dig
     factors = trial_div_until(n, 2, divisors)
     if len(factors) > 1:
         return factors[0]
-    if prime.is_prime(factors[0], check_factor_db=check_factor_db):
+    if prime.is_prime(factors[0], check_factor_db=check_factor_db, trial_div_limit=None):
         return factors[0]
     else:
-        factordb_smallest_factor = factordb_get_smallest_factor(n, num_retries=0, sleep_time=0, digit_limit=digit_limit)
-        if factordb_smallest_factor != -1:
-            return factordb_smallest_factor
-        # weren't able to easily fully factor or find the full factorization for this one, so now we commence
-        # infinite trial division, which will either keep going until it finds a factor, reaches 2^64 (I think)
-        # or the surrounding cpu timer code kills it
-        return infinite_trial_div(n, until=2)[0]
+        num_digits = gmpy2.num_digits(n)
+        if check_factor_db and num_digits >= 50:
+            factordb_smallest_factor = factordb_get_smallest_factor(n, num_retries=0, sleep_time=0, digit_limit=digit_limit)
+            checked_factordb = True
+            if factordb_smallest_factor != -1:
+                return factordb_smallest_factor
+        # trying to factor the whole number is a bit silly if it's large, so just do trialdiv and hope we're kinda lucky
+        # if gmpy2.num_digits(n) > 140:
+        #     # weren't able to easily fully factor or find the full factorization for this one, so now we commence
+        #     # infinite trial division, which will either keep going until it finds a factor, reaches 2^64 (I think)
+        #     # or the surrounding cpu timer code kills it
+        #     return infinite_trial_div(n, until=2)[0]
+        # else:
+            # should be easy enough, just factor
+        return factorize(n, check_factor_db=check_factor_db and not checked_factordb, threads=threads)[0]
 
 
 def smallest_prime_factor_generator(n, divisors=__trialdivisors, check_factor_db=True, digit_limit=10):
@@ -349,6 +371,7 @@ def trial_div_until_distinct(n, until=None, divisors=__trialdivisors):
 
 # useful for guaranteeing we have the smallest factor when the number isn't fully factored
 def infinite_trial_div(n, until=None):
+    logging.info(f"Running infinite trial div for {n}")
     return trial_div_until(n, until=until, divisors=prime.generator())
 
 

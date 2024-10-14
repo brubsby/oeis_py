@@ -14,7 +14,7 @@ cd /mnt/c/GitProjects/oeis/scripts; find . -maxdepth 1 -name "*.dat" | xargs -I 
 cd /mnt/c/GitProjects/oeis/scripts; find . -maxdepth 1 -name "*.dat" | xargs -I {} grep -Po '(?<=\()\d+(?=\))' "{}" | awk '{print length($1)" "$1}' | sort -n | uniq | awk '{print $2}' | head -200 | python remaining_composites.py | head -5 | python ../../t-level/gpuecm.py --pretest 35 | tee /dev/stderr | jq -sRr @uri | xargs -I {} curl -s -G 'http://factordb.com/report.php?report={}&format=0' | lynx -dump -stdin -nolist -width=$(tput cols)
 
 # get a poly
-echo "polyfindv(2,-1,616,7853870748399565503418491086132949611003084327163539608928082651782082677440019289509104472220826203204248945680605153589226335789983618824670684914977716696797453624908097357473,10)" | cat /mnt/c/GitProjects/oeis/data/notes/lucas_snfs_poly.txt - | gp -fq
+echo "polyfindv(2,-1,695,363178330741786240097199519429608726530921533787452659475648714010303015327670952355915954040427745085340122493551186580056442375963950568451856277135010074935055316295418026114137376999447284927441,20)" | cat /mnt/c/GitProjects/oeis/data/notes/lucas_snfs_poly.txt - | gp -fq
 
 # get all the lucas candidates that would benefit from snfs:
 find . -maxdepth 1 -name "*.dat" | xargs -I {} grep -P '(?<=\()\d+(?=\))' "{}" /dev/null | sed -nr 's/\.\/(u|v)(-?[0-9]+)\.(-?[0-9]+)\.dat:([0-9]+).*\(([0-9]+)\).*/\5 if(snfsbetter\1(\2,\3,\4,\5),printf(\"\1,\2,\3,\4,%.01f,C%d\",mindifficulty\1(\2,\3,\4,\5),#digits(\5)));/p' | awk '{print length($1)" "$2}' | sort -n | uniq | awk '{print $2}' | cat /mnt/c/GitProjects/oeis/data/notes/lucas_snfs_poly.txt - | gp -fq
