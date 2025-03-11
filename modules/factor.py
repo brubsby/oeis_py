@@ -62,12 +62,19 @@ def distinct_factors(n, factors=None, threads=1, divisors=__trialdivisors, check
 def factors_as_dict(n, factors=None, divisors=__trialdivisors, check_factor_db=True, threads=1, work=None):
     if factors is None:
         factors = factorize(n, divisors=divisors, check_factor_db=check_factor_db, threads=threads, work=work)
-    if factors == -1:
-        return -1
     multiplicity = {}
     for factor in factors:
         multiplicity[factor] = multiplicity.get(factor, 0) + 1
     return multiplicity
+
+
+def is_squarefree(n, factors=None, divisors=__trialdivisors, check_factor_db=True, threads=1, work=None):
+    trial_div_factors = trial_div_until(n, until=None, divisors=divisors)
+    if len(trial_div_factors) > len(set(trial_div_factors)):
+        return False
+    factor_dict = factors_as_dict(n, factors=factors, divisors=divisors, check_factor_db=check_factor_db, threads=threads, work=work)
+    return not any(map(lambda f: f > 1, factor_dict.values()))
+
 
 
 def factor_dict_to_value(factor_dict):

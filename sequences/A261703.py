@@ -17,7 +17,7 @@ class A261703(Sequence):
     def calculate(self, n):
         if n == 1:
             return gmpy2.mpz(139)
-        return factor.smallest_prime_factor(math.prod(self(k) for k in range(1, n)) + 1, digit_limit=1)
+        return factor.smallest_prime_factor(math.prod(self(k) for k in range(1, n)) + 1, digit_limit=22)
 
 
 sys.modules[__name__] = A261703()

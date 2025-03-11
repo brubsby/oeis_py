@@ -19,9 +19,9 @@ if not expr:
 composite = expression.evaluate(expr)
 print(f"Composite Expression: {expr}")
 print(f"Composite Value:      {composite}")
-remaining_composites = factor.factordb_get_remaining_composites(composite)
-print(f"Remaining Composites:  {remaining_composites}")
 db = oeis_factor_db.OEISFactorDB()
+remaining_composites = db.get_remaining_composites(composite)
+print(f"Remaining Composites:  {remaining_composites}")
 print(f"Current Work:         {db.get_work(remaining_composites[0])}")
 
 work = args.work

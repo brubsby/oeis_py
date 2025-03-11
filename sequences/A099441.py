@@ -5,26 +5,27 @@ import sys
 from modules import factor, base, prime, semiprime
 from sequence import Sequence
 
+from sequences import A000295
 
-class A020639(Sequence):
+
+class A099441(Sequence):
 
     def __init__(self):
         super().__init__(lookup_list=[], start_index=1)
 
     def calculate(self, n):
-        if n == 1:
-            return 1
-        return factor.smallest_prime_factor(n, digit_limit=10)
+        k = self(n-1)+1 if n > 1 else 1
+        for k in itertools.count(start=k):
+            if semiprime.is_semi(A000295(k)) > 0:
+                return k
 
 
-
-sys.modules[__name__] = A020639()
+sys.modules[__name__] = A099441()
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    seq = A020639()
+    # logging.basicConfig(level=logging.INFO)
+    seq = A099441()
+    # seq.generate_data_section()
     # seq.generate_b_file(term_cpu_time=30)
     for n, val in seq.enumerate(alert_time=60, quit_on_alert=True):
         print(f"{n} {val}")
-        if n > 100:
-            break

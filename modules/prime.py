@@ -117,7 +117,8 @@ def prp_test_pfgw(expr):
         pfgw_returned_prime = False
         proc = subprocess.Popen([
             __pfgw_path,
-            "-k", filename,  # "-f0",
+            "-k", filename, "-tc"
+            # "-f0",
         ], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True,
             cwd=dirpath)
         info_logged = False

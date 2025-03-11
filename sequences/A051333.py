@@ -12,7 +12,7 @@ from sequence import Sequence
 class A051333(Sequence):
 
     def __init__(self):
-        super().__init__(lookup_list=[], start_index=1)
+        super().__init__(lookup_list=[], start_index=1, b_file_lookup=True)
 
     def calculate(self, n):
         if n == 1:

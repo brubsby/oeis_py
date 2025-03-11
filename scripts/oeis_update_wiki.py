@@ -71,7 +71,7 @@ if __name__ == "__main__":
         # check work
         logger.debug(f"Getting work for:\n{line}")
         work_done = max([db.get_work(composite) or 0 for composite in remaining_composites])
-        if work_done - wiki_work > 1:
+        if work_done - wiki_work >= 1:
             old_line = line
             t_string = f"t{work_done:g}"
             work_position = 56

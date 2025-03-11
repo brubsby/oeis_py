@@ -22,7 +22,7 @@ __yafu_bin = "yafu-x64-gc.exe" if os.name == 'nt' else "yafu-wsl-icc-static"
 def factor(expr, stop_after_one=False, report_to_factordb=True, threads=1, work=None, pretest=None):
     str_expression = str(expr)
     text = f"{len(str_expression)} char expression: {str_expression[:48] + '...' + str_expression[-48:]}" if len(
-        str_expression) > 200 else expr
+        str_expression) > 1000 else expr
     header_log_message_parts = ["Running yafu"]
     if work:
         header_log_message_parts.append(f"from t{work}")
@@ -87,7 +87,7 @@ def factor(expr, stop_after_one=False, report_to_factordb=True, threads=1, work=
                 elapsed = time.time() - start_time
                 # if elapsed > 10:  # report factors to factordb if it took more than 10 seconds in yafu
                 # always report factors if yafu was called and found a factor
-                if report_to_factordb and len(factors) > 1 and elapsed > 5:
+                if report_to_factordb and len(factors) > 1 and elapsed > 0.5:
                     logger.info(f"yafu found factors: {factors}")
                     factordb.report({expr: factors})
                     logger.info(f"yafu reported factors for expression: {expr}")
@@ -116,7 +116,7 @@ def factor(expr, stop_after_one=False, report_to_factordb=True, threads=1, work=
 def timed_factor(expr, time, threads=1):
     str_expression = str(expr)
     text = f"{len(str_expression)} char expression: {str_expression[:48] + '...' + str_expression[-48:]}" if len(
-        str_expression) > 200 else expr
+        str_expression) > 500 else expr
     logger.info(f"Running yafu for {text} for {time} seconds and stopping")
     str_expr = f"factor({str(expr)})"
     start_time = time.time()

@@ -11,9 +11,9 @@ import requests
 from lxml import html
 
 import gmpy2
+import t_level
 
 from modules import expression, factor, prime, ecmtimes, yafu
-from modules import t_level as tlev
 
 DB_NAME = "oeis_factor.db"
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "db", DB_NAME)
@@ -87,8 +87,86 @@ class OEISFactorDB:
             k INTEGER,
             PRIMARY KEY (composite_id, sequence_id)
         );
+        
+        -- table to store the different clients
+        -- types IN ("CPU", "GPU", "AVX512")
+        
+        CREATE TABLE IF NOT EXISTS client(
+            id INTEGER PRIMARY KEY NOT NULL,
+            name TEXT NOT NULL UNIQUE,
+            type TEXT NOT NULL,
+            creation_timestamp INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        -- table to store ecm stage 1 curve data
+        
+        CREATE TABLE IF NOT EXISTS stage_1_curve(
+            composite_id INTEGER REFERENCES composite(id) ON DELETE CASCADE,
+            client_id INTEGER REFERENCES client(id) ON DELETE SET NULL,
+            stage_1_resume_line TEXT NOT NULL,
+            sigma INTEGER NOT NULL,
+            b1 INTEGER NOT NULL,
+            ecm_param INTEGER,
+            timestamp INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            duration INTEGER,
+            counted_in_t_level INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (composite_id, sigma, b1)
+        );
+        
+        -- table to store ecm stage 2 curve data
+        
+        CREATE TABLE IF NOT EXISTS stage_2_curve(
+            composite_id INTEGER REFERENCES composite(id) ON DELETE CASCADE,
+            client_id INTEGER REFERENCES client(id) ON DELETE SET NULL,
+            sigma INTEGER REFERENCES stage_1_curve(sigma) ON DELETE CASCADE,
+            b2_start INTEGER NOT NULL,
+            b2_end INTEGER NOT NULL,
+            timestamp INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            duration INTEGER,
+            counted_in_t_level INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (composite_id, sigma, b2_start)
+        );
         """)
-        # todo make view
+
+    def register_client(self, name, type="CPU"):
+        cursor = self.connection.cursor()
+        cursor.execute(
+            "INSERT INTO client(name, type) "
+            "VALUES (?, ?);",
+            (name, type)
+        )
+        self.connection.commit()
+
+
+    # METHOD=ECM; SIGMA=16975636616726985561; B1=10000; N=(2^1129+1)/3; X=0x342d705ba8bfc2207ac27682cb14362f8bf7cb4ea665f17ea4de2eb2611b98656eae6ecd51ac88108713a04d9bbad4add3237e67648c5778ba7dd02655d6349024a2bda0966edd2d077d67e52f91e84a946e2431b34033d6d1118e73067d2b8a14ba0d2aaef071cb633212419bb17270bb175d249b40766ac9fcec158efd841bd70a6963ef13f39e827caaeec9; CHECKSUM=1474905577; PROGRAM=GMP-ECM 7.0.6; Y=0x0; X0=0x0; Y0=0x0; WHO=brubsby@bubtop; TIME=Mon Mar  3 00:16:49 2025;
+
+
+    def submit_stage_1_curves(self, composite, residue_line, client_name, duration):
+        values = dict(tuple(kvp.strip().split("=")) for kvp in residue_line.strip().split(";") if kvp)
+        cursor = self.connection.cursor()
+        cursor.execute(
+            "INSERT INTO stage_1_curve "
+            "(composite_id, client_id, sigma, stage_1_resume_line, b1, ecm_param, duration) "
+            "VALUES ((SELECT id FROM composite WHERE value = ?), "
+            "(SELECT id FROM client WHERE name = ?), "
+            "?, ?, ?, ?, ?);",
+            (pickle.dumps(composite), client_name, residue_line,
+             values.get("SIGMA"), values.get("B1"),
+             values.get("PARAM"), duration)
+        )
+        self.connection.commit()
+
+    def submit_stage_2_curves(self, composite, sigma, client_name, b2_start, b2_end, duration):
+        cursor = self.connection.cursor()
+        cursor.execute(
+            "INSERT INTO stage_2_curve "
+            "(composite_id, client_id, sigma, b2_start, b2_end, duration) "
+            "VALUES ((SELECT id FROM composite WHERE value = ?), "
+            "(SELECT id FROM client WHERE name = ?), "
+            "?, ?, ?, ?);",
+            (pickle.dumps(composite), client_name, sigma, b2_start, b2_end, duration)
+        )
+        self.connection.commit()
 
     def add_sequence(self, sequence_id, more=None, factor_requirement=None, first_unknown_n=None, first_unknown_k=None):
         cursor = self.connection.cursor()
@@ -162,8 +240,8 @@ class OEISFactorDB:
         expression_regex = re.compile(r"C(?:\d+|big)\s{1,15}(\*?)(.*?)(?:t\d+|\d+@|\s{2,}|$)")
         parsed_data = []
         for line in info_lines:
-            t_level = max(
-                tlev.get_t_level([(sci_int(curves), sci_int(b1)) for curves, b1 in re.findall(work_regex, line)]),
+            line_t_level = max(
+                t_level.get_t_level([(int(sci_int(curves)), int(sci_int(b1)), None, None) for curves, b1 in re.findall(work_regex, line)]),
                 float((lambda x: x.group(1) if x else 0.0)(re.search(t_level_regex, line))))
             associated_sequences = re.findall(sequence_id_regex, line)
             num_digits = (lambda x: int(x.group(1)) if x else None)(re.search(composite_digits_regex, line))
@@ -180,7 +258,7 @@ class OEISFactorDB:
                 "line": line,
                 "expression": expr,
                 "composite_digits": num_digits,
-                "work": t_level,
+                "work": line_t_level,
                 "more": more,
                 "sequences": associated_sequences,
             }
@@ -238,11 +316,16 @@ class OEISFactorDB:
         cursor.execute("UPDATE composite SET t_level = MAX(?, t_level) WHERE value = ?", (new_work, pickle.dumps(composite)))
         self.connection.commit()
 
-    # transforms the old composite into a new one, if it's still unfactored
+
     def validate_stored_composite_unfactored(self, old_composite):
+        return self.get_remaining_composites(old_composite) == [old_composite]
+
+    # transforms the old composite into a new one, if it's still unfactored
+    def get_remaining_composites(self, old_composite):
+        old_composite = gmpy2.mpz(old_composite)
         remaining_composites = factor.factordb_get_remaining_composites(old_composite)
         if remaining_composites == [old_composite]:
-            return True  # composite is unfactored still
+            return remaining_composites  # composite is unfactored still
         elif len(remaining_composites) == 1:  # new single unfactored composite different to the one we passed in
             new_composite = remaining_composites[0]
             new_digits = gmpy2.num_digits(new_composite)
@@ -254,8 +337,11 @@ class OEISFactorDB:
             new_composite_id, new_work = cursor.fetchone() or (None, None)
             # get the metadata for the old composite
             cursor.execute("SELECT id, t_level FROM composite WHERE value = ?;", (pickle.dumps(old_composite),))
-            old_composite_id, old_work = cursor.fetchone()
-            # there should be something here, otherwise there's problems
+            rows = cursor.fetchall()
+            # there should be something here, otherwise just return the remaining composites
+            if len(rows) == 0:
+                return remaining_composites
+            old_composite_id, old_work = rows[0]
             assert old_composite_id is not None
             # conservatively take the maximum of the work for both composites
             work = max(new_work or 0, old_work)
@@ -268,25 +354,26 @@ class OEISFactorDB:
             self.add_composite(new_composite, sequence_ids=sequences, work=work)
             logger.info(f"moving sequence pointers to new composite and deleting old record")
             self.delete_composite(old_composite)
-            return False  # false because the composite wasn't unfactored
+            return remaining_composites
         elif len(remaining_composites) == 0:
             # no composites remaining here, just delete
             self.delete_composite(old_composite)
+            return remaining_composites
         elif len(remaining_composites) > 1:
             # multiple new composites (not likely to happen)
             raise NotImplementedError(f"Multiple composites found in place of old composite:\nold:{old_composite}\nnew={remaining_composites}")
 
-    def get_easiest_composite(self, digit_limit=500, pretest=0.3, threads=1):
+    def get_easiest_composite(self, digit_limit=500, pretest=0.3, delta_t=5, threads=1):
         cur = self.cursor()
         cur.execute(f"SELECT id, value, t_level, expression, digits FROM composite WHERE digits < ? AND t_level < (digits * ?) ORDER BY t_level ASC, digits ASC", (digit_limit, pretest))
         result = cur.fetchall()
-        tuples = list(map(lambda row: (self.get_ecm_time(int(row['digits']), int(row['t_level']), ((int(row['t_level']) // 5) + 1) * 5, threads=threads), row), result))
+        tuples = list(map(lambda row: (self.get_ecm_time(int(row['digits']), int(row['t_level']), ((int(row['t_level']) // delta_t) + 1) * delta_t, threads=threads), row), result))
         tuples = sorted(tuples, key=lambda x: x[0])
         for completion_time, composite_row in tuples:
             if self.validate_stored_composite_unfactored(composite_row['value']):
                 return composite_row, completion_time
             else:
-                return self.get_easiest_composite(digit_limit=digit_limit, pretest=pretest, threads=threads)
+                return self.get_easiest_composite(digit_limit=digit_limit, pretest=pretest, delta_t=delta_t, threads=threads)
 
     def get_smallest_t_level_composite(self, digit_limit=500):
         cur = self.cursor()
@@ -307,8 +394,19 @@ class OEISFactorDB:
             else:
                 return self.get_smallest_composite(digit_limit=digit_limit, pretest=pretest)
 
+    def get_all_pretested_composites(self, pretest=0.3):
+        cur = self.cursor()
+        cur.execute(f"SELECT id, value, t_level, expression, digits FROM composite WHERE t_level > (digits * ?) ORDER BY digits ASC", (pretest,))
+        result = cur.fetchall()
+        print(f"{'expression':<32} digits t-level decimal-expansion")
+        for composite_row in result:
+            if self.validate_stored_composite_unfactored(composite_row['value']):
+                print(f"{composite_row['expression']:<38} {composite_row['digits']:<6} {composite_row['t_level']:2.1f}    {composite_row['value']}")
+
+
     def get_ecm_time(self, digits, start_work, end_work, threads=1):
-        b1, curves = yafu.get_b1_curves(start_work, end_work)
+        # b1, curves = yafu.get_b1_curves(start_work, end_work)
+        curves, b1, _, _, _ = t_level.get_suggestion_curves_from_t_levels(start_work or 0, end_work)
         return ecmtimes.get_ecm_time(digits, b1, curves, threads=threads)
 
     def get_smallest_known_composites_with_no_values(self):

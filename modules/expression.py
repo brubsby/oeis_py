@@ -164,9 +164,10 @@ _fn = {
     "trunc": int,
     "round": round,
     "sgn": lambda a: -1 if a < -_epsilon else 1 if a > _epsilon else 0,
-    # functionsl with multiple arguments
+    # functions with multiple arguments
     "multiply": lambda a, b: a * b,
     "hypot": math.hypot,
+    "binomial": gmpy2.bincoef,
     # functions with a variable number of arguments
     "all": lambda *a: all(a),
     "Fibonacci": gmpy2.fib,

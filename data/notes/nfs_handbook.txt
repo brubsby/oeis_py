@@ -70,15 +70,18 @@ cd ~/msieve_nfsathome
 
 ## CADO-NFS:
 1. start server with:
-k=800; composite_name="v2.-1.$k"; equivalent_digits=150; N=
-cd ~/cado-nfs/; python3 cado-nfs.py -t 16 -w "$HOME/cado-nfs/$composite_name" $N server.whitelist=0.0.0.0/0 server.port=9999 server.ssl=no
+composite_name="A309290.89"; equivalent_digits=160; N="64814539504505998825257471908145784457157706050754516171836033734771452825355981688499705900514772324461614421632202476413686315942230276693442554726619408312027"
+cd ~/cado-nfs/; python3 cado-nfs.py -t 12 -w "$HOME/cado-nfs/$composite_name" $N server.whitelist=0.0.0.0/0 server.port=9999 server.ssl=no slaves.hostnames=localhost slaves.scriptpath=$HOME/cado-nfs/build/$(hostname) --slaves 0
 2. start clients with, http if no ssl, https if ssl, C145+ should be 4-threaded, or I=14=4 threads, I=15=8 threads
-python3 cado-nfs-client.py -d --server=http://localhost:9999 --override t 2
+python3 cado-nfs-client.py -d --server=http://localhost:9999 --override t 4
 
 
 ## CADO-NFS SNFS:
 # generate the poly with yafu or the pari/gp code in generalized_lucas_snfs_poly.txt
-cd ~/cado-nfs; l="v"; p="2"; q="-1"; k="831"; composite_name="$l$p.$q.$k"; equivalent_digits=150;
+cd ~/cado-nfs;
+# l="v"; p="2"; q="-1"; k="831"; composite_name="$l$p.$q.$k";
+composite_name="A110759.59"
+equivalent_digits=160;
 polyfile=c$equivalent_digits.poly; paramfile=params.c$equivalent_digits
 mkdir -p $composite_name
 nano ~/cado-nfs/$composite_name/$polyfile
@@ -113,7 +116,10 @@ python3 cado-nfs.py -t 16 -w "$HOME/cado-nfs/$composite_name" $composite_name/$p
 
 ## CADO-NFS into GPU MSieve LA: https://www.mersenneforum.org/showpost.php?p=655467&postcount=15
 # sometimes CADO has an error during LA, so running LA on Msieve GPU works better (and also it's just faster)
-cd ~/cado-nfs; l="v"; p="2"; q="-1"; k="831"; composite_name="$l$p.$q.$k"; equivalent_digits=150;
+cd ~/cado-nfs;
+# l="v"; p="2"; q="-1"; k="831"; composite_name="$l$p.$q.$k";
+composite_name="A309290.89"
+equivalent_digits=160;
 polyfile=c$equivalent_digits.poly; paramfile=params.c$equivalent_digits
 cd ~/cado-nfs/$composite_name
 rm ~/msieve_nfsathome/msieve.*
@@ -128,8 +134,8 @@ sed -i -E "s/Y([0-9]): /R\1 /" ~/msieve_nfsathome/msieve.fb
 sed -i '/^[[:space:]]*$/d' ~/msieve_nfsathome/msieve.fb
 # nano ~/msieve_nfsathome/msieve.fb
 echo $N > ~/msieve_nfsathome/worktodo.ini
-cd *.upload; for f in *.gz;do zcat $f >> ~/msieve_nfsathome/msieve.dat;done;
-cd ~/msieve_nfsathome/; ./msieve -v -g 0 -t 16 -nc target_density=70
+cd *.upload; for f in *.gz;do zcat $f | sed '/^#/ d' >> ~/msieve_nfsathome/msieve.dat;done;
+cd ~/msieve_nfsathome/; ./msieve -v -g 0 -t 16 -nc target_density=60
 
 
 # Assorted tidbits:

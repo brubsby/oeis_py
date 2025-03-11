@@ -34,13 +34,14 @@ if __name__ == "__main__":
     ecm_only = True
     num_threads = 12
     composite_size_limit = 10000
+    delta_t_levels_per_job = 1
     if ecm_only:
         while True:
-            composite_row, completion_time = db.get_easiest_composite(digit_limit=composite_size_limit, threads=num_threads)
+            composite_row, completion_time = db.get_easiest_composite(digit_limit=composite_size_limit, delta_t=delta_t_levels_per_job, threads=num_threads)
             root_logger.info(f"selected C{composite_row['digits']} belonging to {composite_row['expression']}, with existing work t{composite_row['t_level']:.02f}, should complete in {completion_time/3600:.02f} hours")
             composite = composite_row['value']
             work = float(composite_row['t_level'])
-            pretest_level = ((work // 5) + 1) * 5  # next multiple of 5 t-level, perhaps reduce to 1 as t-level gets higher
+            pretest_level = ((work // delta_t_levels_per_job) + 1) * delta_t_levels_per_job  # next multiple of 2 t-level, perhaps reduce to 1 as t-level gets higher
             factors = yafu.factor(composite, threads=num_threads, work=composite_row['t_level'], pretest=pretest_level)
             if len(factors) > 1:
                 root_logger.info("Found factors!")

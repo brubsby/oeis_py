@@ -96,14 +96,6 @@ cd ~
 # https://www.mersenneforum.org/showpost.php?p=622435&postcount=7
 
 
-# cpu msieve
-cd ~
-sudo apt-get install subversion
-svn co https://svn.code.sf.net/p/msieve/code/trunk msieve
-cd msieve
-make all NO_ZLIB=1 ECM=1 VBITS=128
-
-
 # gmp for yafu (not necessary as long as the apt-get version works)
 #GMPVERSION="6.2.1"
 #wget https://gmplib.org/download/gmp/gmp-$GMPVERSION.tar.lz
@@ -114,6 +106,13 @@ make all NO_ZLIB=1 ECM=1 VBITS=128
 #./configure --prefix=$HOME/gmp-install/$GMPVERSION/
 #make
 #sudo make install
+
+# cpu msieve
+sudo apt-get install subversion
+svn co https://svn.code.sf.net/p/msieve/code/trunk msieve
+cd msieve
+make all NO_ZLIB=1 ECM=1 VBITS=128
+cd ~
 
 # cpu ecm (for yafu)
 git clone https://gitlab.inria.fr/zimmerma/ecm.git cpu_ecm
@@ -139,10 +138,14 @@ cd ~
 
 # yafu
 git clone https://github.com/bbuhrow/yafu.git
-# known working commit
 cd yafu
-git checkout 93a23e5
+# known working commit
+git checkout b4cb9cb
 make COMPILER=gcc NFS=1 USE_AVX2=1 USE_BMI2=1
+chmod +x factor/lasieve4_64/gnfs-lasieve4I1*e
+chmod +x factor/lasieve5_64/gnfs-lasieve4I1*e
+chmod +x factor/lasieve5_64/bin/gnfs-lasieve4I1*e
+# may have to change yafu.ini to use the lasieve5_64/bin sievers
 cd ~
 
 
