@@ -9,14 +9,13 @@ import subprocess
 import time
 import uuid
 import tempfile
-from modules import factordb
+from modules import factordb, config
 
 import gmpy2
 
 logger = logging.getLogger("yafu")
-__yafu_dir = "C:/Software/yafu-master/" \
-    if os.name == 'nt' else os.path.join(os.path.expanduser("~"), "yafu")
-__yafu_bin = "yafu-x64-gc.exe" if os.name == 'nt' else "yafu-wsl-icc-static"
+__yafu_dir = config.get_yafu_dir()
+__yafu_bin = config.get_yafu_bin()
 
 
 def factor(expr, stop_after_one=False, report_to_factordb=True, threads=1, work=None, pretest=None):

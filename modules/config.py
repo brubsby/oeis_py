@@ -12,5 +12,17 @@ def get_factordb_cookie():
     return config.get("Credentials", "fdbuser")
 
 
+def get_yafu_dir():
+    config = configparser.ConfigParser()
+    config.read(CONFIG_PATH)
+    return config.get("Paths", "yafu")
+
+
+def get_yafu_bin():
+    config = configparser.ConfigParser()
+    config.read(CONFIG_PATH)
+    return config.get("Paths", "yafu_bin")
+
+
 if __name__ == "__main__":
     print(get_factordb_cookie())
