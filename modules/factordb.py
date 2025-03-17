@@ -8,11 +8,18 @@ import gmpy2
 
 REPORT_ENDPOINT = "http://factordb.com/report.php"
 ENDPOINT = "http://factordb.com/api"
-session = requests.Session()
+_session = None
 
-COOKIE = config.get_factordb_cookie()
-if COOKIE:
-    session.cookies.set("fdbuser", COOKIE)
+
+def _get_session():
+    global _session
+    if _session is None:
+        _session = requests.Session()
+
+        cookie = config.get_factordb_cookie()
+        if cookie:
+            _session.cookies.set("fdbuser", cookie)
+    return _session
 
 
 class FactorDB():
@@ -20,11 +27,12 @@ class FactorDB():
         self.n = n
         self.result = None
 
+
     def connect(self, reconnect=False, sleep=1):
         if self.result and not reconnect:
             return self.result
         try:
-            self.result = session.get(ENDPOINT, params={"query": str(self.n)})
+            self.result = _get_session().get(ENDPOINT, params={"query": str(self.n)})
         except requests.exceptions.ConnectionError:
             time.sleep(sleep)
             return self.connect(reconnect, sleep * 2)
@@ -78,7 +86,7 @@ def report(composite_to_factors_dict, sleep=1):
         "format": "0"
     }
     try:
-        response = session.get(REPORT_ENDPOINT, params=payload)
+        response = _get_session().get(REPORT_ENDPOINT, params=payload)
         return response
     except Exception as e:
         print(e, file=sys.stderr)
