@@ -4,7 +4,6 @@ import os
 import re
 import sys
 import time
-import notifypy
 
 from func_timeout import func_timeout, FunctionTimedOut
 import modules.checkpoint as checkpoint
@@ -76,10 +75,10 @@ class Sequence:
             if alert_time:
                 now = time.time()
                 if now - last > alert_time:
-                    noti = notifypy.Notify()
-                    noti.title = f"New term found in {self.__class__.__name__}!"
-                    noti.message = f"{self.__class__.__name__}(n) = {value}"
-                    noti.send()
+                    # noti = notifypy.Notify()
+                    # noti.title = f"New term found in {self.__class__.__name__}!"
+                    # noti.message = f"{self.__class__.__name__}(n) = {value}"
+                    # noti.send()
                     if quit_on_alert:
                         print(f"Exiting as value was found after calculating for {int(now - last)} seconds!")
                         sys.exit(0)
