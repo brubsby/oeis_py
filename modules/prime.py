@@ -1,20 +1,17 @@
-import itertools
 import logging
-import math
 import os
-import subprocess
 import shutil
+import subprocess
 import time
-import timeit
+import uuid
 
 import gmpy2
-import primesieve
-import uuid
+import sympy
 
 from modules.factordb import FactorDB
 
-__trialdivisors = primesieve.primes(2, int(1e6))
-__primes_set = frozenset(primesieve.primes(2, int(1e7)))
+__trialdivisors = sympy.ntheory.generate.primerange(2, int(1e7))
+__primes_set = frozenset(__trialdivisors)
 # https://github.com/aleaxit/gmpy/issues/354#issuecomment-1404620217
 __gmp_BPSW_LIMIT = (21 * pow(gmpy2.mpz(10), gmpy2.mpz(15)))//10
 __pfgw_factordb_digit_limit = 7500
@@ -160,24 +157,26 @@ def prp_test_pfgw(expr):
 
 
 def generator(start=0, start_nth=False):
-    iterator = primesieve.Iterator()
     if start_nth:
-        assert start > 0
-        for i in range(start-1):
-            iterator.next_prime()
+        val = sympy.ntheory.generate.prime(start) if start > 0 else 2
+        yield val
+    elif is_prime(start):
+        val = start
+        yield val
     else:
-        iterator.skipto(max(start-1, 0))
+        val = start
     while True:
-        yield iterator.next_prime()
+        val = sympy.ntheory.generate.nextprime(val)
+        yield val
 
 
 # tested this to be the fastest way to do it out of a lot
 def nth_primorial(n):
-    return math.prod(primesieve.n_primes(n), start=gmpy2.mpz(1))
+    return sympy.ntheory.generate.primorial(n, nth=False) if n > 0 else 1
 
 
 def primorial(p):
-    return math.prod(primesieve.primes(2, p) if p > 0 else [], start=gmpy2.mpz(1))
+    return sympy.ntheory.generate.primorial(p, nth=True) if p > 0 else 1
 
 
 def previous_prime(val):

@@ -1,14 +1,10 @@
-import copy
-import functools
-import heapq
-import itertools
 import logging
 import math
-import random
 import time
 
 import gmpy2
-import primesieve
+import sympy
+
 from modules import prime
 from modules.factordb import FactorDB
 from modules import yafu
@@ -19,7 +15,7 @@ import sequences.A051334 as A051334
 import sequences.A051335 as A051335
 import sequences.A051308 as A051308
 
-__trialdivisors = primesieve.primes(2, int(1e6))
+__trialdivisors = sympy.ntheory.generate.primerange(2, int(1e6))
 
 
 # returns the proper divisors, but invokes yafu and may take unbounded time
@@ -480,51 +476,6 @@ def euclid_mullin_product(start, index):
     partial_product = euclid_mullin_product(start, index-1)
     return partial_product * smallest_prime_factor(partial_product + 1, digit_limit=None)
 
-
-def numbers_with_n_distinct_factors_generator(n):
-    size_limit = gmpy2.mpz(gmpy2.floor(gmpy2.exp(4*n-6)))
-    exponent_sum_size_limit = n + 3  # 2 * gmpy2.mpz(gmpy2.floor(gmpy2.log2(n))) + 4
-    prime_it = primesieve.Iterator()
-    prime_generator = prime.generator()
-    primes = list(itertools.islice(prime_generator, n))
-    factors = copy.copy(primes)
-    factors = dict([(prime_factor, 1) for prime_factor in factors])
-    value = gmpy2.mpz(factor_dict_to_value(factors))
-    heap = [(value, factors)]
-    seen_set = set()
-    # old_value = 0
-    for _ in itertools.count(start=1):
-        value, factors = heapq.heappop(heap)
-        # logging.debug(f"heap size: {len(heap)}")
-        # while value == old_value:
-        #     value, factors = heapq.heappop(heap)
-        for prime_factor, multiplicity in factors.items():
-            if prime_factor == 2:
-                new_factors = copy.copy(factors)
-                new_factors[prime_factor] += 1
-                new_value = value * prime_factor
-                if new_value < size_limit and new_value not in seen_set:
-                    heapq.heappush(heap, (new_value, new_factors))
-                    seen_set.add(new_value)
-            prime_it.skipto(prime_factor)
-            next_prime = prime_it.next_prime()
-            if next_prime not in factors and multiplicity == 1:
-                new_factors = copy.copy(factors)
-                del new_factors[prime_factor]
-                new_factors[next_prime] = 1
-                new_value = (value // prime_factor) * next_prime
-                if new_value < size_limit and new_value not in seen_set:
-                    heapq.heappush(heap, (new_value, new_factors))
-                    seen_set.add(new_value)
-            elif next_prime in factors and multiplicity > 1:
-                new_factors = copy.copy(factors)
-                new_factors[prime_factor] -= 1
-                new_factors[next_prime] += 1
-                new_value = (value // prime_factor) * next_prime
-                if new_value < size_limit and new_value not in seen_set:
-                    heapq.heappush(heap, (new_value, new_factors))
-                    seen_set.add(new_value)
-        yield value, factors
 
         # old_value = value
 
