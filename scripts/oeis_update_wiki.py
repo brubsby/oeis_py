@@ -1,4 +1,5 @@
 import logging
+import math
 import re
 import sys
 import time
@@ -33,6 +34,7 @@ if __name__ == "__main__":
         sequences = row["sequences"]
         wiki_work = row["work"]
         more = row["more"]
+        factor_requirement = row["factor_requirement"]
         updated = False
         value = None
         if "Cbig" in line or (wiki_num_digits and wiki_num_digits > 10000):  # don't mess with the enormous ones
@@ -55,7 +57,12 @@ if __name__ == "__main__":
         if not value:
             continue
         remaining_composites = factor.factordb_get_remaining_composites(value)
-        if len(remaining_composites) == 0:
+        if value > math.prod(remaining_composites) * 11 and factor_requirement == "semiprimality":
+            updated_lines.append(re.sub(work_regex, "[factors found]", line))
+            if "[factors found]" not in updated_lines[-1]:
+                updated_lines[-1] = updated_lines[-1] + "[factors found]"
+            continue
+        elif len(remaining_composites) == 0:
             updated_lines.append(re.sub(work_regex, "[factored]", line))
             if "[factored]" not in updated_lines[-1]:
                 updated_lines[-1] = updated_lines[-1] + "[factored]"

@@ -1,5 +1,6 @@
 import sys
 import time
+from modules import config
 
 import requests
 import gmpy2
@@ -8,6 +9,10 @@ import gmpy2
 REPORT_ENDPOINT = "http://factordb.com/report.php"
 ENDPOINT = "http://factordb.com/api"
 session = requests.Session()
+
+COOKIE = config.get_factordb_cookie()
+if COOKIE:
+    session.cookies.set("fdbuser", COOKIE)
 
 
 class FactorDB():

@@ -71,7 +71,7 @@ class OEISFactorDB:
         CREATE TABLE IF NOT EXISTS sequence(
             id TEXT PRIMARY KEY NOT NULL,
             more INTEGER,
-            factor_requirement INTEGER,
+            factor_requirement TEXT,
             first_unknown_n INTEGER,
             first_unknown_k INTEGER
         );
@@ -87,6 +87,9 @@ class OEISFactorDB:
             k INTEGER,
             PRIMARY KEY (composite_id, sequence_id)
         );
+        
+        
+        -- CREATE VIEW IF NOT EXISTS composite_view
         
         -- table to store the different clients
         -- types IN ("CPU", "GPU", "AVX512")
@@ -126,6 +129,16 @@ class OEISFactorDB:
             counted_in_t_level INTEGER NOT NULL DEFAULT 0,
             PRIMARY KEY (composite_id, sigma, b2_start)
         );
+        
+        CREATE TABLE IF NOT EXISTS reservation(
+            composite_id INTEGER REFERENCES composite(id) ON DELETE CASCADE,
+            client_id INTEGER REFERENCES client(id) ON DELETE CASCADE,
+            type INTEGER REFERENCES client(type) ON DELETE CASCADE,
+            t_level_on_completion REAL,
+            timestamp INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expiry_timestamp INTEGER NOT NULL DEFAULT (CURRENT_TIMESTAMP + (86400000 * 5)),
+            PRIMARY KEY (composite_id, client_id, type)
+        );
         """)
 
     def register_client(self, name, type="CPU"):
@@ -154,6 +167,7 @@ class OEISFactorDB:
              values.get("SIGMA"), values.get("B1"),
              values.get("PARAM"), duration)
         )
+        # TODO free reservation
         self.connection.commit()
 
     def submit_stage_2_curves(self, composite, sigma, client_name, b2_start, b2_end, duration):
@@ -166,7 +180,87 @@ class OEISFactorDB:
             "?, ?, ?, ?);",
             (pickle.dumps(composite), client_name, sigma, b2_start, b2_end, duration)
         )
+        # TODO free reservation
         self.connection.commit()
+
+    def request_stage1_GPU_work(self, client_name, digit_limit=300, curves=8192):
+        cur = self.cursor()
+        cur.execute(
+            f"SELECT id, value, t_level, expression, digits "
+            f"FROM composite WHERE digits < ? ORDER BY t_level ASC, digits ASC",
+            (digit_limit,))
+        result = cur.fetchall()
+        tuples = list(map(lambda row: (
+        ), result))
+        tuples = sorted(tuples, key=lambda x: x[0])
+        for completion_time, composite_row in tuples:
+            if self.validate_stored_composite_unfactored(composite_row['value']):
+                # TODO make reservation
+                return composite_row['value'], self.get_optimal_gpu_b1(curves, int(composite_row['t_level'])), completion_time
+            else:
+                return self.request_stage1_GPU_work(client_name, digit_limit=digit_limit, curves=curves)
+
+    def make_reservation(self, composite, client_name, t_level_on_completion):
+        cur = self.cursor()
+        cur.execute(
+            "INSERT INTO reservation "
+            "(composite_id, client_id, type, t_level_on_completion) "
+            "VALUES ((SELECT id FROM composite WHERE value = ?), "
+            "(SELECT id FROM client WHERE name = ?), "
+            "(SELECT type FROM client WHERE name = ?), "
+            "?);",
+            (pickle.dumps(composite), client_name, client_name, t_level_on_completion)
+        )
+        self.connection.commit()
+
+
+    def free_reservation(self, composite, client_name):
+        cur = self.cursor()
+        cur.execute(
+            "DELETE FROM reservation "
+            "WHERE composite_id = (SELECT id FROM composite WHERE value = ?) AND "
+            "client_id = (SELECT id FROM client WHERE name = ?) AND "
+            "client_type = (SELECT type FROM client WHERE name = ?);",
+            (pickle.dumps(composite), client_name, client_name)
+        )
+        self.connection.commit()
+
+
+    # assume GPU always takes same amount of time per B1
+    # we want to find the B1 such that t-level grows fastest per B1
+    # given the number of curves we have
+    def get_optimal_gpu_b1(self, gpu_curves, existing_t_level):
+        # start with a b1 guess
+        b1 = t_level.get_regression_b1_for_t(existing_t_level + 1)
+        existing_curves, existing_b1 = t_level.get_t_level_curves(existing_t_level)
+        existing_curve_tup = (existing_curves, existing_b1, None, 1)
+        max_val = 0
+        max_b1 = b1
+        direction = -1
+        magnitude = 0.01
+        misses = 0
+        t_level_diff_per_b1 = (t_level.get_t_level([
+            existing_curve_tup,
+            (gpu_curves, b1, b1, 3)]) - existing_t_level) / b1
+        for i in range(100):
+            if t_level_diff_per_b1 > max_val:
+                max_val = t_level_diff_per_b1
+                max_b1 = b1
+                misses = 0
+            b1 = int(b1 * (1 + direction * magnitude))
+            t_level_diff_per_b1 = (t_level.get_t_level([
+                existing_curve_tup,
+                (gpu_curves, b1, b1, 3)]) - existing_t_level) / b1
+            if t_level_diff_per_b1 < max_val:
+                if i == 0:
+                    direction *= -1
+                else:
+                    misses += 1
+                    if misses > 5:
+                        break
+        # return int(max_b1)
+        return t_level.b1_level_round(max_b1)
+
 
     def add_sequence(self, sequence_id, more=None, factor_requirement=None, first_unknown_n=None, first_unknown_k=None):
         cursor = self.connection.cursor()
@@ -182,7 +276,7 @@ class OEISFactorDB:
         )
         self.connection.commit()
 
-    def add_composite(self, value, digits=None, expression=None, work=None, sequence_ids=None, k=None, first_sequence_more=None):
+    def add_composite(self, value, digits=None, expression=None, work=None, sequence_ids=None, k=None, first_sequence_more=None, factor_requirement=None):
         if value is not None and type(value) != gmpy2.mpz:
             value = gmpy2.mpz(value)
         if value is not None:
@@ -213,7 +307,7 @@ class OEISFactorDB:
             )
             composite_id = cursor.lastrowid
         for i, sequence_id in enumerate(sequence_ids):
-            self.add_sequence(sequence_id, more=first_sequence_more if i == 0 else None)
+            self.add_sequence(sequence_id, more=first_sequence_more if i == 0 else None, factor_requirement=factor_requirement)
             if composite_id is not None:
                 cursor.execute(
                     "INSERT OR IGNORE INTO composite_to_sequence(composite_id, sequence_id, k) VALUES (?, ?, ?);",
@@ -238,6 +332,7 @@ class OEISFactorDB:
         sequence_id_regex = re.compile(r"A\d{6}(?![(^_])")
         composite_digits_regex = re.compile(r"\WC(\d+)")
         expression_regex = re.compile(r"C(?:\d+|big)\s{1,15}(\*?)(.*?)(?:t\d+|\d+@|\s{2,}|$)")
+        factor_requirement_regex = re.compile(r"\[(specific small factors|smallest factor|semiprimality|\d-almost primality)\]")
         parsed_data = []
         for line in info_lines:
             line_t_level = max(
@@ -245,6 +340,7 @@ class OEISFactorDB:
                 float((lambda x: x.group(1) if x else 0.0)(re.search(t_level_regex, line))))
             associated_sequences = re.findall(sequence_id_regex, line)
             num_digits = (lambda x: int(x.group(1)) if x else None)(re.search(composite_digits_regex, line))
+            factor_requirement = (lambda x: str(x.group(1)) if x else None)(re.search(factor_requirement_regex, line))
 
             search = re.search(expression_regex, line)
             expr = more = None
@@ -261,6 +357,7 @@ class OEISFactorDB:
                 "work": line_t_level,
                 "more": more,
                 "sequences": associated_sequences,
+                "factor_requirement": factor_requirement,
             }
             parsed_data.append(parsed_line)
         return parsed_data
@@ -273,6 +370,7 @@ class OEISFactorDB:
             sequences = row["sequences"]
             t_level = row["work"]
             more = row["more"]
+            factor_requirement = row["factor_requirement"]
             value = None
             if "Cbig" in line or (num_digits and num_digits > 10000):  # don't mess with the enormous ones
                 continue
@@ -290,7 +388,7 @@ class OEISFactorDB:
                     calculated_digits = gmpy2.num_digits(composite) if composite else None
                     if num_digits and composite and abs(calculated_digits - num_digits) > 1:
                         logger.error(f"calculated ({calculated_digits}) and reported ({num_digits}) digit length disparity for:\n{line}")
-                    self.add_composite(composite, digits=num_digits, expression=expr, sequence_ids=sequences, work=t_level, first_sequence_more=more)
+                    self.add_composite(composite, digits=num_digits, expression=expr, sequence_ids=sequences, work=t_level, first_sequence_more=more, factor_requirement=factor_requirement)
             else:
                 logger.error(f"No composite value for \n{line}")
                 for sequence in sequences:
@@ -375,7 +473,7 @@ class OEISFactorDB:
             else:
                 return self.get_easiest_composite(digit_limit=digit_limit, pretest=pretest, delta_t=delta_t, threads=threads)
 
-    def get_smallest_t_level_composite(self, digit_limit=500):
+    def get_smallest_t_level_composite(self, digit_limit=500, factor_requirement=None):
         cur = self.cursor()
         cur.execute(f"SELECT id, value, t_level, expression, digits FROM composite WHERE digits < ? ORDER BY t_level ASC, digits ASC", (digit_limit,))
         composite_row = cur.fetchone()

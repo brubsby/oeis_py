@@ -87,7 +87,7 @@ def factor(expr, stop_after_one=False, report_to_factordb=True, threads=1, work=
                 elapsed = time.time() - start_time
                 # if elapsed > 10:  # report factors to factordb if it took more than 10 seconds in yafu
                 # always report factors if yafu was called and found a factor
-                if report_to_factordb and len(factors) > 1 and elapsed > 0.5:
+                if report_to_factordb and len(factors) > 1:  # and elapsed > 0.5:
                     logger.info(f"yafu found factors: {factors}")
                     factordb.report({expr: factors})
                     logger.info(f"yafu reported factors for expression: {expr}")
