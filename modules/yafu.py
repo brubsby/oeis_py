@@ -65,8 +65,13 @@ def factor(expr, stop_after_one=False, report_to_factordb=True, threads=1, work=
                                 universal_newlines=True, cwd=dirpath, bufsize=1)
         print(f"{str_expr}\n", file=proc.stdin, flush=True)
         proc.stdin.close()
-        for i, line in enumerate(proc.stdout):
-            logger.debug(line[:-1])
+        try:
+            for i, line in enumerate(proc.stdout):
+                logger.debug(line[:-1])
+        except UnicodeDecodeError as e:
+            logger.exception(e)
+            print(proc.stdout)
+            raise e
         proc.wait()
         try:
             with open(os.path.join(dirpath, factors_filename), "r") as factors_file:
