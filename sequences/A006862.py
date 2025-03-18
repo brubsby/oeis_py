@@ -29,6 +29,6 @@ if __name__ == "__main__":
     seq = A006862()
     # seq.generate_b_file(term_cpu_time=30)
     for n, val in seq.enumerate(alert_time=60, quit_on_alert=True, start=0):
-        if n > 100:
+        if n > 20:
             break
         print(f"{n} {val}")

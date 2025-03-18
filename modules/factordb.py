@@ -1,13 +1,16 @@
+import math
 import sys
 import time
-from modules import config
+from lxml import html
 
-import requests
 import gmpy2
+import requests
 
+from modules import config
 
 REPORT_ENDPOINT = "http://factordb.com/report.php"
 ENDPOINT = "http://factordb.com/api"
+SEQUENCE_ENDPOINT = f"https://factordb.com/sequences.php"
 _session = None
 
 
@@ -23,8 +26,13 @@ def _get_session():
 
 
 class FactorDB():
-    def __init__(self, n):
-        self.n = n
+    def __init__(self, val, is_id=False):
+        self.n = None
+        self.id = None
+        if not is_id:
+            self.n = val
+        else:
+            self.id = val
         self.result = None
 
 
@@ -32,7 +40,7 @@ class FactorDB():
         if self.result and not reconnect:
             return self.result
         try:
-            self.result = _get_session().get(ENDPOINT, params={"query": str(self.n)})
+            self.result = _get_session().get(ENDPOINT, params={"query": str(self.n)} if self.n else {"id": str(self.id)})
         except requests.exceptions.ConnectionError:
             time.sleep(sleep)
             return self.connect(reconnect, sleep * 2)
@@ -46,9 +54,18 @@ class FactorDB():
             return self.result.json()
         return None
 
+    def get_value(self):
+        if self.result:
+            if not self.n:
+                self.n = math.prod(self.get_factor_list())
+            return self.n
+        return None
+
     def get_id(self):
         if self.result:
-            return self.result.json().get("id")
+            if not self.id:
+                self.id = self.result.json().get("id")
+            return self.id
         return None
 
     def get_status(self):
@@ -92,3 +109,32 @@ def report(composite_to_factors_dict, sleep=1):
         print(e, file=sys.stderr)
         time.sleep(sleep)
         return report(composite_to_factors_dict, sleep=sleep*2)
+
+
+def get_latest_aliquot_term(composite, sleep=1):
+    payload = {
+        "se": "1",
+        "action": "last",
+        "aq": str(composite),
+    }
+    try:
+        response = _get_session().get(SEQUENCE_ENDPOINT, params=payload)
+        response.raise_for_status()
+    except Exception as e:
+        print(e, file=sys.stderr)
+        time.sleep(sleep)
+        return get_latest_aliquot_term(composite, sleep=sleep * 2)
+    if response and response.ok:
+        tree = html.fromstring(response.text)
+        elements = tree.xpath("/html/body/table[2]/tr[2]/td[4]/a[1]/@href")
+        href = elements[0] if elements else None
+        if href:
+            id = href.split("=")[1]
+            fdb = FactorDB(id, is_id=True)
+            fdb.connect()
+            return fdb
+    raise "Couldn't get latest composite"
+
+
+if __name__ == "__main__":
+    print(get_latest_aliquot_term(4391946))

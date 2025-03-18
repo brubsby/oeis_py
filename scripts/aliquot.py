@@ -1,8 +1,19 @@
 import argparse
+import datetime
 import logging
 import os
+import pickle
+import sqlite3
 
-from modules import factor
+import gmpy2
+import requests
+
+from modules import factor, factordb
+
+DB_NAME = "aliquot.db"
+DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "db", DB_NAME)
+
+logger = logging.getLogger("aliquot_db")
 
 
 def positive_integer(arg):
@@ -12,8 +23,100 @@ def positive_integer(arg):
     return val
 
 
-def get_furthest_composite(composite):
-    pass
+def date_converter(val):
+    val = val.decode("utf-8")
+    if val.isnumeric():
+        return datetime.date.today()
+    return datetime.datetime.strptime(val, "%Y-%m-%d").date()
+
+
+def datetime_converter(val):
+    return datetime.datetime.strptime(val.decode("utf-8"), "%Y-%m-%d %H:%M:%S")
+
+
+class AliquotDB:
+
+    def __init__(self):
+        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+        sqlite3.register_converter("PICKLE", pickle.loads)
+        sqlite3.register_converter("DATE", date_converter)
+        sqlite3.register_converter("DATETIME", datetime_converter)
+        self.connection = sqlite3.connect(DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES)
+        self.create_db()
+
+    def cursor(self):
+        cursor = self.connection.cursor()
+        cursor.row_factory = sqlite3.Row
+        return cursor
+
+    def create_db(self):
+        cur = self.connection.cursor()
+        cur.executescript("""
+        CREATE TABLE IF NOT EXISTS aliquot(
+            sequence INTEGER PRIMARY KEY NOT NULL,
+            sequence_index INTEGER,
+            term_size INTEGER,
+            composite_size INTEGER,
+            guide TEXT,
+            class INTEGER,
+            abundance FLOAT,
+            known_factors TEXT,
+            reservation TEXT,
+            progress DATE,
+            last_updated DATETIME,
+            priority FLOAT,
+            leading_id INTEGER,
+            bool BOOLEAN
+        );
+        """)
+
+    def update_sequence(self, sequence):
+        latest_term_fdb = factordb.get_latest_aliquot_term(sequence)
+        value = latest_term_fdb.get_value()
+        term_size = gmpy2.num_digits(value)
+        composite_size = gmpy2.num_digits(latest_term_fdb.get_factor_list()[-1])
+        term_id = latest_term_fdb.get_id()
+        cur = self.connection.cursor()
+        # TODO calculate new info instead of NULL
+        cur.execute("""
+        UPDATE aliquot
+        SET term_size = ?, composite_size = ?, leading_id = ?,
+        guide = NULL, class = NULL, abundance = NULL, known_factors = NULL, progress = NULL
+        WHERE sequence = ?;
+        """, (term_size, composite_size, term_id, sequence))
+        self.connection.commit()
+
+
+
+    def get_smallest(self, term=True):
+        cur = self.connection.cursor()
+        ordering_clauses = ['term_size ASC', 'composite_size ASC']
+        ordering = ', '.join(ordering_clauses if term else reversed(ordering_clauses))
+        cur.execute(f"SELECT * FROM aliquot WHERE reservation = '' ORDER BY {ordering};")
+        rows = cur.fetchall()
+        for row in rows:
+            fdb = factordb.FactorDB(row[-2], is_id=True)
+            fdb.connect()
+            if fdb.get_status() == 'FF':
+                # sequence entry out of date, should probably just query the aliquot sequence page
+                # just go on to the next number for now
+                self.update_sequence(row[0])
+                return self.get_smallest(term=True)
+            else:
+                return fdb.get_value()
+
+    def fetch_data(self):
+        response = requests.get("https://www.rechenkraft.net/aliquot/AllSeq.json")
+        response.raise_for_status()
+        data_list = response.json()["aaData"]
+        cur = self.connection.cursor()
+        cur.executemany("""
+            INSERT INTO aliquot(
+            sequence, sequence_index, term_size, composite_size, guide, class, abundance, known_factors, reservation,
+            progress, last_updated, priority, leading_id, bool
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, data_list)
+        self.connection.commit()
 
 
 if __name__ == "__main__":
@@ -31,13 +134,28 @@ if __name__ == "__main__":
         dest="threads",
         type=positive_integer,
         default=os.cpu_count(),
-        help="number of threads to use in yafu"
+        help="number of threads to use in yafu",
+    )
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
+        "-s",
+        "--smallest-term",
+        action="store_true",
+        dest="smallest_term",
+        help="run yafu on the smallest terms on the blue page",
+    )
+    group.add_argument(
+        "-c",
+        "--smallest-composite",
+        action="store_true",
+        dest="smallest_composite",
+        help="run yafu on the smallest composites on the blue page",
     )
     parser.add_argument(
         "composite",
-        action="store",
+        nargs="?",
         type=positive_integer,
-        help="composite to start on"
+        help="composite to start on",
     )
     args = parser.parse_args()
     loglevel = logging.WARNING
@@ -49,8 +167,21 @@ if __name__ == "__main__":
 
     num_threads = args.threads
     composite = args.composite
+    smallest_term = args.smallest_term
+    smallest_composite = args.smallest_composite
 
-    term = composite
-    while True:
-        print(term)
-        term = factor.aliquot_sum(term, threads=num_threads)
+    if composite:
+        term = composite
+        while True:
+            print(term)
+            term = factor.aliquot_sum(term, threads=num_threads)
+    elif smallest_term or smallest_composite:
+        db = AliquotDB()
+        while True:
+            term = db.get_smallest(smallest_term)
+            next_term = factor.aliquot_sum(term, threads=num_threads)
+            while gmpy2.num_digits(next_term) <= 101:
+                term = next_term
+                next_term = factor.aliquot_sum(term, threads=num_threads)
+
+

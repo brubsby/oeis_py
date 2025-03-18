@@ -4,7 +4,7 @@ import sys
 
 import gmpy2
 
-from modules import factor, base, prime, semiprime
+from modules import factor, base, prime, semiprime, primorial
 from sequence import Sequence
 
 
@@ -17,12 +17,12 @@ class A087714(Sequence):
         p = self.load_checkpoint(default=1 if n == 1 else self(n-1), n=n)
         prime_gen = prime.generator(p + 1)
         p = next(prime_gen)
-        primorial = prime.primorial(p) if p > 1 else 1
+        prim = primorial.primorial(p) if p > 1 else 1
         for p in prime_gen:
-            if prime.is_prime(primorial + p) and prime.is_prime(primorial - p):
+            if prime.is_prime(prim + p) and prime.is_prime(prim - p):
                 self.delete_checkpoint(n=n)
                 return prime.previous_prime(p)
-            primorial = primorial * p
+            prim = prim * p
             self.checkpoint(p, p, 10000, n=n)
 
 

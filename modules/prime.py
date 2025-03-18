@@ -6,11 +6,24 @@ import time
 import uuid
 
 import gmpy2
-import sympy
 
 from modules.factordb import FactorDB
 
-__trialdivisors = sympy.ntheory.generate.primerange(2, int(1e7))
+
+def prime_range(start, end):
+    val = start
+    if gmpy2.is_prime(val):
+        yield val
+    while True:
+        val = gmpy2.next_prime(val)
+        if val <= end:
+            yield val
+        else:
+            break
+
+
+
+__trialdivisors = list(prime_range(2, int(1e7)))
 __primes_set = frozenset(__trialdivisors)
 # https://github.com/aleaxit/gmpy/issues/354#issuecomment-1404620217
 __gmp_BPSW_LIMIT = (21 * pow(gmpy2.mpz(10), gmpy2.mpz(15)))//10
@@ -158,7 +171,7 @@ def prp_test_pfgw(expr):
 
 def generator(start=0, start_nth=False):
     if start_nth:
-        val = sympy.ntheory.generate.prime(start) if start > 0 else 2
+        val = sympy_prime.prime(start) if start > 0 else 2
         yield val
     elif is_prime(start):
         val = start
@@ -166,17 +179,8 @@ def generator(start=0, start_nth=False):
     else:
         val = start
     while True:
-        val = sympy.ntheory.generate.nextprime(val)
+        val = gmpy2.next_prime(val)
         yield val
-
-
-# tested this to be the fastest way to do it out of a lot
-def nth_primorial(n):
-    return sympy.ntheory.generate.primorial(n, nth=False) if n > 0 else 1
-
-
-def primorial(p):
-    return sympy.ntheory.generate.primorial(p, nth=True) if p > 0 else 1
 
 
 def previous_prime(val):

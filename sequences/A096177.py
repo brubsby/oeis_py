@@ -4,7 +4,7 @@ import sys
 
 import primesieve
 
-from modules import factor, base, prime, semiprime
+from modules import factor, base, prime, semiprime, primorial
 from sequence import Sequence
 from sequences import A002110
 
@@ -18,7 +18,7 @@ class A096177(Sequence):
         p = self.load_checkpoint(default=self(n-1) if n > 1 else 2, n=n)
         prime_it = primesieve.Iterator()
         prime_it.skipto(p)
-        val = prime.primorial(p)//2
+        val = primorial.primorial(p)//2
         while True:
             self.checkpoint(p, p, 1, n=n)
             p = prime_it.next_prime()

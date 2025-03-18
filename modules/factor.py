@@ -3,7 +3,6 @@ import math
 import time
 
 import gmpy2
-import sympy
 
 from modules import prime
 from modules.factordb import FactorDB
@@ -15,7 +14,7 @@ import sequences.A051334 as A051334
 import sequences.A051335 as A051335
 import sequences.A051308 as A051308
 
-__trialdivisors = list(sympy.ntheory.generate.primerange(2, int(1e6)))
+__trialdivisors = list(prime.prime_range(2, int(1e6)))
 
 
 # returns the proper divisors, but invokes yafu and may take unbounded time

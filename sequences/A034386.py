@@ -5,7 +5,7 @@ import sys
 import gmpy2
 import primesieve
 
-from modules import factor, base, prime, semiprime
+from modules import factor, base, prime, semiprime, primorial
 from sequence import Sequence
 
 
@@ -15,14 +15,14 @@ class A034386(Sequence):
         super().__init__(lookup_list=[], start_index=0)
 
     def calculate(self, n):
-        return prime.primorial(n)
+        return primorial.primorial(n)
 
     def generator(self, start):
         n = start
         if n == 0:
             yield 1
             n = 1
-        val = prime.primorial(n-1)
+        val = primorial.primorial(n-1)
         prime_it = primesieve.Iterator()
         prime_it.skipto(n+1)
         p = prime_it.prev_prime()

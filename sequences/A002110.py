@@ -4,11 +4,10 @@ import sys
 
 import gmpy2
 import primesieve
+import sympy
 
-from modules import factor, base, prime, semiprime
+from modules import factor, base, prime, semiprime, primorial
 from sequence import Sequence
-
-from sympy import primorial
 
 
 class A002110(Sequence):
@@ -17,7 +16,7 @@ class A002110(Sequence):
         super().__init__(lookup_list=[], start_index=0)
 
     def calculate(self, n):
-        return prime.nth_primorial(n)
+        return primorial.nth_primorial(n)
 
     def generator(self, start):
         value = self(start) if start > 1 else gmpy2.mpz(1)
@@ -28,7 +27,6 @@ class A002110(Sequence):
         while True:
             value *= prime_it.next_prime()
             yield value
-
 
 
 sys.modules[__name__] = A002110()
