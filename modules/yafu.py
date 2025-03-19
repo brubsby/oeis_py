@@ -62,7 +62,7 @@ def factor(expr, stop_after_one=False, report_to_factordb=True, threads=1, work=
             popen_arglist.append(str(pretest))
         proc = subprocess.Popen(popen_arglist,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE,
-                                universal_newlines=True, cwd=dirpath, bufsize=1)
+                                universal_newlines=True, cwd=dirpath, encoding="UTF-16", bufsize=1)
         print(f"{str_expr}\n", file=proc.stdin, flush=True)
         proc.stdin.close()
         try:
