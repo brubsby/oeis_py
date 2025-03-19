@@ -70,7 +70,8 @@ def factor(expr, stop_after_one=False, report_to_factordb=True, threads=1, work=
                 logger.debug(line[:-1])
         except UnicodeDecodeError as e:
             logger.exception(e)
-            print(proc.stdout)
+            print("proc.stdout.read:")
+            print(proc.stdout.read())
             raise e
         proc.wait()
         try:
