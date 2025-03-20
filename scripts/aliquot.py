@@ -144,10 +144,10 @@ class AliquotDB:
     def get_update_post(self):
         cur = self.connection.cursor()
         cur.execute("""
-        SELECT sequence FROM aliquot WHERE guide IS NULL ORDER BY composite_size ASC, term_size ASC LIMIT 200;
+        SELECT sequence FROM aliquot WHERE guide IS NULL ORDER BY sequence ASC;
         """)
         rows = list(cur.fetchall())
-        chunked = list(chunks(list(itertools.chain.from_iterable(rows)), 10))
+        chunked = list(chunks(list(itertools.chain.from_iterable(rows)), 13))
         lines = [" ".join([str(innerinner) for innerinner in inner]) for inner in chunked]
         lines = ["Update " + line for line in lines]
         return "\n".join(lines)
