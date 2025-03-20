@@ -108,7 +108,7 @@ class AliquotDB:
                 # sequence entry out of date, should probably just query the aliquot sequence page
                 # just go on to the next number for now
                 self.update_sequence(row[0])
-                return self.get_smallest(term=True)
+                return self.get_smallest(term=term)
             else:
                 return fdb.get_value()
 
@@ -234,7 +234,7 @@ if __name__ == "__main__":
     elif smallest_term or smallest_composite:
         db = AliquotDB()
         while True:
-            term = db.get_smallest(smallest_term)
+            term = db.get_smallest(term=smallest_term)
             next_term = factor.aliquot_sum(term, threads=num_threads)
             while gmpy2.num_digits(next_term) <= 101:
                 term = next_term
