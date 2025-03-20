@@ -1,5 +1,6 @@
 import argparse
 import datetime
+import itertools
 import logging
 import os
 import pickle
@@ -34,6 +35,12 @@ def datetime_converter(val):
     return datetime.datetime.strptime(val.decode("utf-8"), "%Y-%m-%d %H:%M:%S")
 
 
+def chunks(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
+
+
 class AliquotDB:
 
     def __init__(self):
@@ -66,7 +73,7 @@ class AliquotDB:
             last_updated DATETIME,
             priority FLOAT,
             leading_id INTEGER,
-            bool BOOLEAN
+            is_driver BOOLEAN
         );
         """)
 
@@ -81,7 +88,7 @@ class AliquotDB:
         cur.execute("""
         UPDATE aliquot
         SET term_size = ?, composite_size = ?, leading_id = ?,
-        guide = NULL, class = NULL, abundance = NULL, known_factors = NULL, progress = NULL
+        guide = NULL, class = NULL, abundance = NULL, known_factors = NULL, progress = NULL, is_driver = NULL
         WHERE sequence = ?;
         """, (term_size, composite_size, term_id, sequence))
         self.connection.commit()
@@ -113,10 +120,38 @@ class AliquotDB:
         cur.executemany("""
             INSERT INTO aliquot(
             sequence, sequence_index, term_size, composite_size, guide, class, abundance, known_factors, reservation,
-            progress, last_updated, priority, leading_id, bool
+            progress, last_updated, priority, leading_id, is_driver
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(sequence) DO UPDATE SET 
+            sequence_index = excluded.sequence_index,
+            term_size = excluded.term_size,
+            composite_size = excluded.composite_size,
+            guide = excluded.guide,
+            class = excluded.class,
+            abundance = excluded.abundance,
+            known_factors = excluded.known_factors,
+            reservation = excluded.reservation,
+            progress = excluded.progress,
+            last_updated = excluded.last_updated,
+            priority = excluded.priority,
+            leading_id = excluded.leading_id,
+            is_driver = excluded.is_driver
+            WHERE (reservation != excluded.reservation) OR last_updated < excluded.last_updated;
         """, data_list)
         self.connection.commit()
+
+
+    def get_update_post(self):
+        cur = self.connection.cursor()
+        cur.execute("""
+        SELECT sequence FROM aliquot WHERE guide IS NULL ORDER BY composite_size ASC, term_size ASC LIMIT 200;
+        """)
+        rows = list(cur.fetchall())
+        chunked = list(chunks(list(itertools.chain.from_iterable(rows)), 10))
+        lines = [" ".join([str(innerinner) for innerinner in inner]) for inner in chunked]
+        lines = ["Update " + line for line in lines]
+        return "\n".join(lines)
+
 
 
 if __name__ == "__main__":
@@ -136,9 +171,15 @@ if __name__ == "__main__":
         default=os.cpu_count(),
         help="number of threads to use in yafu",
     )
-    group = parser.add_mutually_exclusive_group(required=True)
+    parser.add_argument(
+        "--update",
+        action="store_true",
+        dest="update",
+        help="print an update post with the first 200 out of date sequences that we know about",
+    )
+    group = parser.add_mutually_exclusive_group()
     group.add_argument(
-        "-s",
+        "-e",
         "--smallest-term",
         action="store_true",
         dest="smallest_term",
@@ -151,11 +192,13 @@ if __name__ == "__main__":
         dest="smallest_composite",
         help="run yafu on the smallest composites on the blue page",
     )
-    parser.add_argument(
-        "composite",
+    group.add_argument(
+        "-q"
+        "--composite",
         nargs="?",
+        dest="composite",
         type=positive_integer,
-        help="composite to start on",
+        help="specific composite to start on",
     )
     args = parser.parse_args()
     loglevel = logging.WARNING
@@ -169,8 +212,12 @@ if __name__ == "__main__":
     composite = args.composite
     smallest_term = args.smallest_term
     smallest_composite = args.smallest_composite
+    update = args.update
 
-    if composite:
+    if update:
+        db = AliquotDB()
+        print(db.get_update_post())
+    elif composite:
         term = composite
         while True:
             print(term)
