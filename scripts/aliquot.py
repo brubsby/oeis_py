@@ -163,6 +163,11 @@ if __name__ == "__main__":
         default=0,
         help="verbosity (-v, -vv, etc)")
     parser.add_argument(
+        "-f",
+        "--fetch",
+        action="store_true",
+        help="fetch the latest reservations and status from the blue page into the db")
+    parser.add_argument(
         "-t",
         "--threads",
         action="store",
@@ -213,7 +218,11 @@ if __name__ == "__main__":
     smallest_term = args.smallest_term
     smallest_composite = args.smallest_composite
     update = args.update
+    fetch = args.fetch
 
+    if fetch:
+        db = AliquotDB()
+        db.fetch_data()
     if update:
         db = AliquotDB()
         print(db.get_update_post())
