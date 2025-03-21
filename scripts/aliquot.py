@@ -234,9 +234,10 @@ if __name__ == "__main__":
     elif smallest_term or smallest_composite:
         db = AliquotDB()
         while True:
-            term = db.get_smallest(term=smallest_term)
+            starting_term = db.get_smallest(term=smallest_term)
+            term = starting_term
             next_term = factor.aliquot_sum(term, threads=num_threads)
-            while gmpy2.num_digits(next_term) <= 101:
+            while gmpy2.num_digits(next_term) <= gmpy2.num_digits(starting_term):
                 term = next_term
                 next_term = factor.aliquot_sum(term, threads=num_threads)
 
