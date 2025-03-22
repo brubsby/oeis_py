@@ -112,6 +112,14 @@ class AliquotDB:
             else:
                 return fdb.get_value()
 
+
+    def get_term_size_floor(self, term=True):
+        cur = self.connection.cursor()
+        cur.execute(f"SELECT MIN(term_size) FROM aliquot WHERE reservation = '';")
+        row = cur.fetchone()
+        val = row[0]
+        return val
+
     def fetch_data(self):
         response = requests.get("https://www.rechenkraft.net/aliquot/AllSeq.json")
         response.raise_for_status()
@@ -235,9 +243,10 @@ if __name__ == "__main__":
         db = AliquotDB()
         while True:
             starting_term = db.get_smallest(term=smallest_term)
+            term_size_target = db.get_term_size_floor() + 1
             term = starting_term
             next_term = factor.aliquot_sum(term, threads=num_threads)
-            while gmpy2.num_digits(next_term) <= gmpy2.num_digits(starting_term):
+            while gmpy2.num_digits(next_term) <= term_size_target:
                 term = next_term
                 next_term = factor.aliquot_sum(term, threads=num_threads)
 
