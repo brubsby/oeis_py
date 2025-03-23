@@ -280,7 +280,7 @@ def factordb_factor(n, num_retries=10, sleep_time=2):
         return [n]
     if status in ["FF"]:
         return f.get_factor_list()
-    if num_retries >= 0:
+    if num_retries > 0:
         if sleep_time > 0:
             logging.info(
                 f"Sleeping for {sleep_time} seconds after inconclusive status ({status}) on FactorDB for value: {n}")

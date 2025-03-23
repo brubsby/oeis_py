@@ -98,7 +98,7 @@ class AliquotDB:
     def get_smallest(self, term=True):
         cur = self.connection.cursor()
         ordering_clauses = ['term_size ASC', 'composite_size ASC']
-        ordering_clauses = ordering_clauses if term else reversed(ordering_clauses)
+        ordering_clauses = ordering_clauses if term else list(reversed(ordering_clauses))
         # higher classes have lower stability
         ordering_clauses.append('class DESC')
         ordering = ', '.join(ordering_clauses)
