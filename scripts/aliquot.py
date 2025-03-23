@@ -98,7 +98,10 @@ class AliquotDB:
     def get_smallest(self, term=True):
         cur = self.connection.cursor()
         ordering_clauses = ['term_size ASC', 'composite_size ASC']
-        ordering = ', '.join(ordering_clauses if term else reversed(ordering_clauses))
+        ordering_clauses = ordering_clauses if term else reversed(ordering_clauses)
+        # higher classes have lower stability
+        ordering_clauses.append('class DESC')
+        ordering = ', '.join(ordering_clauses)
         cur.execute(f"SELECT * FROM aliquot WHERE reservation = '' ORDER BY {ordering};")
         rows = cur.fetchall()
         for row in rows:
@@ -235,7 +238,7 @@ if __name__ == "__main__":
         db = AliquotDB()
         print(db.get_update_post())
     elif composite:
-        term = composite
+        term = factordb.get_latest_aliquot_term(composite).get_value()
         while True:
             print(term)
             term = factor.aliquot_sum(term, threads=num_threads)
