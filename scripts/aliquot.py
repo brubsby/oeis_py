@@ -213,7 +213,6 @@ if __name__ == "__main__":
         "--composite",
         nargs="?",
         dest="composite",
-        type=positive_integer,
         help="specific composite to start on",
     )
     args = parser.parse_args()
