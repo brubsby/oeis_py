@@ -127,13 +127,15 @@ def get_latest_aliquot_term(composite, sleep=1):
         return get_latest_aliquot_term(composite, sleep=sleep * 2)
     if response and response.ok:
         tree = html.fromstring(response.text)
-        elements = tree.xpath("/html/body/table[2]/tr[2]/td[4]/a[1]/@href")
-        href = elements[0] if elements else None
+        latest_composite_href = tree.xpath("/html/body/table[2]/tr[2]/td[4]/a[1]/@href")
+        href = latest_composite_href[0] if latest_composite_href else None
+        latest_composite_index = tree.xpath("/html/body/table[2]/tr[2]/td[2]/text()")
+        index = int(latest_composite_index[0]) if latest_composite_index else None
         if href:
             id = href.split("=")[1]
             fdb = FactorDB(id, is_id=True)
             fdb.connect()
-            return fdb
+            return fdb, index
     raise "Couldn't get latest composite"
 
 

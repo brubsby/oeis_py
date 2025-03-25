@@ -71,9 +71,10 @@ def num_digits(n):
 
 class YafuLineReader:
     """Object to handle reading yafu lines to discern progress"""
-    def __init__(self, yafu_file_logger, log_level, term, last_term):
+    def __init__(self, yafu_file_logger, log_level, name, term, last_term):
         self.logger = yafu_file_logger
         self.log_level = log_level
+        self.name = name
         self.term = term
         self.factors = {}
         self.remaining_composite = term
@@ -94,7 +95,7 @@ class YafuLineReader:
             if self.num_digits > 15 else self.composite_str
         factor_str = ".".join([f"{str(p)}^{str(e)}" if e > 1 else (str(p) if num_digits(p) < 10 else f"P{str(num_digits(p))}")
                                  for p, e in sorted(self.factors.items())])
-        self.composite_str = f"{elided} = {factor_str}"
+        self.composite_str = f"{factor_str}"
         if self.remaining_composite > 1:
             self.composite_str += f"{'.' if factor_str != '' else ''}C{num_digits(self.remaining_composite)}"
 
@@ -190,7 +191,7 @@ class YafuLineReader:
             # otherwise do the cutesy single line progress per composite
             timestr = datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S')
             termsize = shutil.get_terminal_size().columns
-            outstr = f" {timestr} {self.glyph} C{self.num_digits} = {self.composite_str} {'>' if self.yafu_progress.strip() != '' else ' '} {self.yafu_progress: <{self.max_yafu_progress}}\r"
+            outstr = f" {timestr} {self.name} {self.glyph} C{self.num_digits}.{str(self.term)[:2]} = {self.composite_str} {'>' if self.yafu_progress.strip() != '' else ' '} {self.yafu_progress: <{self.max_yafu_progress}}\r"
             print(f"{outstr[:termsize-1]}\r" if len(outstr) > termsize-1 else outstr, end="")
             # and log the output to a file
         self.logger.debug(line)
@@ -234,7 +235,7 @@ class AliquotDB:
         """)
 
     def update_sequence(self, sequence):
-        latest_term_fdb = factordb.get_latest_aliquot_term(sequence)
+        latest_term_fdb, index = factordb.get_latest_aliquot_term(sequence)
         value = latest_term_fdb.get_value()
         term_size = num_digits(value)
         composite_size = num_digits(latest_term_fdb.get_factor_list()[-1])
@@ -243,10 +244,10 @@ class AliquotDB:
         # TODO calculate new info instead of NULL
         cur.execute("""
         UPDATE aliquot
-        SET term_size = ?, composite_size = ?, leading_id = ?,
+        SET sequence_index = ?, term_size = ?, composite_size = ?, leading_id = ?,
         guide = NULL, class = NULL, abundance = NULL, known_factors = NULL, progress = NULL, is_driver = NULL
         WHERE sequence = ?;
-        """, (term_size, composite_size, term_id, sequence))
+        """, (index, term_size, composite_size, term_id, sequence))
         self.connection.commit()
 
 
@@ -264,12 +265,11 @@ class AliquotDB:
             fdb = factordb.FactorDB(row[-2], is_id=True)
             fdb.connect()
             if fdb.get_status() == 'FF':
-                # sequence entry out of date, should probably just query the aliquot sequence page
-                # just go on to the next number for now
+                # sequence entry out of date, update this one and requery the db for the smallest
                 self.update_sequence(row[0])
                 return self.get_smallest(term=term)
             else:
-                return fdb.get_value()
+                return fdb, row
 
 
     def get_term_size_floor(self, term=True):
@@ -398,6 +398,7 @@ if __name__ == "__main__":
 
     if fetch:
         db = AliquotDB()
+        print("Fetching data from the blue page...")
         db.fetch_data()
     if update:
         db = AliquotDB()
@@ -414,9 +415,11 @@ if __name__ == "__main__":
 
     if composite:
         last_term = None
-        term = factordb.get_latest_aliquot_term(composite).get_value()
+        term_fdb, index = factordb.get_latest_aliquot_term(composite)
+        term = term_fdb.get_value()
         while True:
-            line_reader = YafuLineReader(file_logger, loglevel, term, last_term)
+            name = f"{composite}:i{index}"
+            line_reader = YafuLineReader(file_logger, loglevel, composite, term, last_term)
             last_term = term
             term = aliquot_sum(last_term, threads=num_threads, yafu_line_reader=line_reader)
 
@@ -424,8 +427,13 @@ if __name__ == "__main__":
         db = AliquotDB()
         while True:
             last_term = None
-            term = db.get_smallest(term=smallest_term)
-            line_reader = YafuLineReader(file_logger, loglevel, term, last_term)
+            term_fdb, row = db.get_smallest(term=smallest_term)
+            term = term_fdb.get_value()
+            seq = row[0]
+            index = row[1]
+            # TODO consider extracting the partial factorization for factordb
+            name = f"{seq}:i{index}"
+            line_reader = YafuLineReader(file_logger, loglevel, name, term, last_term)
             term_size_target = db.get_term_size_floor() + 1
             last_term = term
             term = aliquot_sum(last_term, threads=num_threads, yafu_line_reader=line_reader)
