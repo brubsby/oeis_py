@@ -154,7 +154,7 @@ class YafuLineReader:
             match = re.search(r"(\d+) rels found", line)
             if match:
                 self.rels_found = int(match.group(1))
-            match = re.search(r"ETA (\d) sec")
+            match = re.search(r"ETA (\d) sec", line)
             if match:
                 eta = match.group(1)
             self.yafu_progress = "SIQS"
