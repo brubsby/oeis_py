@@ -64,6 +64,10 @@ def aliquot_sum(n, threads=1, yafu_line_reader=None):
     return factor.aliquot_sum(n, factors=factorize(n, threads=threads, yafu_line_reader=yafu_line_reader))
 
 
+def num_digits(n):
+    return len(str(n))
+
+
 class YafuLineReader:
     """Object to handle reading yafu lines to discern progress"""
     def __init__(self, yafu_file_logger, log_level, term, last_term):
@@ -77,7 +81,7 @@ class YafuLineReader:
         self.b2 = None
         self.rels_found = 0
         self.rels_needed = None
-        self.num_digits = gmpy2.num_digits(term)
+        self.num_digits = num_digits(term)
         self.glyph = "●" if last_term is None else ("▲" if term > last_term else "▼")
         self.yafu_progress = ""
         self.stage = None
@@ -87,11 +91,11 @@ class YafuLineReader:
     def _update_composite_str(self):
         elided = f"{str(self.term)[:6] + '...' + str(self.term)[-6:]}" \
             if self.num_digits > 15 else self.composite_str
-        factor_str = ".".join([f"{str(p)}^{str(e)}" if e > 1 else (str(p) if gmpy2.num_digits(p) < 10 else f"P{str(gmpy2.num_digits(p))}")
-                                 for p, e in self.factors.items()])
+        factor_str = ".".join([f"{str(p)}^{str(e)}" if e > 1 else (str(p) if num_digits(p) < 10 else f"P{str(num_digits(p))}")
+                                 for p, e in sorted(self.factors.items())])
         self.composite_str = f"{elided} = {factor_str}"
         if self.remaining_composite > 1:
-            self.composite_str += f".C{gmpy2.num_digits(self.remaining_composite)}"
+            self.composite_str += f"{'.' if factor_str != '' else ''}C{num_digits(self.remaining_composite)}"
 
 
     def _add_factor(self, new_factor):
@@ -103,7 +107,7 @@ class YafuLineReader:
 
     def _parse_progress(self, line):
         if "found prp" in line:
-            match = re.search(r"prp(\d+) = (\d+)", line)
+            match = re.search(r"prp(\d+) factor = (\d+)", line)
             if match:
                 self._add_factor(match.group(2))
         elif line.startswith("div:"):
@@ -146,8 +150,6 @@ class YafuLineReader:
             self.stage = "SIQS"
             match = re.search(r"(\d+) relations needed", line)
             self.rels_needed = int(match.group(1))
-        elif line.startswith("***factors found***"):
-            self.yafu_progress = ""
 
         if self.stage == "SIQS":
             eta = None
@@ -163,6 +165,15 @@ class YafuLineReader:
             if eta is not None:
                 self.yafu_progress += f" ETA: {eta} sec"
 
+        if line.startswith("***factors found***"):
+            self.stage = "finishing"
+            self.yafu_progress = ""
+
+        if self.stage == "finishing" and line.startswith("P"):
+            match = re.search(r"P(\d+) = (\d+)", line)
+            if match:
+                size, new_factor = match.group(1, 2)
+                self._add_factor(new_factor)
 
         self.max_yafu_progress = max(len(self.yafu_progress), self.max_yafu_progress)
 
@@ -177,7 +188,7 @@ class YafuLineReader:
         else:
             # otherwise do the cutesy single line progress per composite
             timestr = datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S')
-            print(f" {timestr} {self.glyph} C{self.num_digits} = {self.composite_str} > {self.yafu_progress: <{self.max_yafu_progress}}\r", end="")
+            print(f" {timestr} {self.glyph} C{self.num_digits} = {self.composite_str} {'>' if self.yafu_progress.strip() != '' else ' '} {self.yafu_progress: <{self.max_yafu_progress}}\r", end="")
             # and log the output to a file
         self.logger.debug(line)
 
@@ -222,8 +233,8 @@ class AliquotDB:
     def update_sequence(self, sequence):
         latest_term_fdb = factordb.get_latest_aliquot_term(sequence)
         value = latest_term_fdb.get_value()
-        term_size = gmpy2.num_digits(value)
-        composite_size = gmpy2.num_digits(latest_term_fdb.get_factor_list()[-1])
+        term_size = num_digits(value)
+        composite_size = num_digits(latest_term_fdb.get_factor_list()[-1])
         term_id = latest_term_fdb.get_id()
         cur = self.connection.cursor()
         # TODO calculate new info instead of NULL
@@ -415,7 +426,7 @@ if __name__ == "__main__":
             term_size_target = db.get_term_size_floor() + 1
             last_term = term
             term = aliquot_sum(last_term, threads=num_threads, yafu_line_reader=line_reader)
-            while gmpy2.num_digits(term) <= term_size_target:
+            while num_digits(term) <= term_size_target:
                 line_reader = YafuLineReader(file_logger, loglevel, term, last_term)
                 last_term = term
                 term = aliquot_sum(last_term, threads=num_threads, yafu_line_reader=line_reader)
