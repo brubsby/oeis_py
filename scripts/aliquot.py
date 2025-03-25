@@ -14,12 +14,14 @@ import gmpy2
 import requests
 
 from logging.handlers import TimedRotatingFileHandler
+from pathlib import Path
 
 from modules import yafu, factor, factordb
 
 DB_NAME = "aliquot.db"
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "db", DB_NAME)
 YAFU_LOG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "logs", f"aliquot-yafu.log")
+Path(os.path.dirname(YAFU_LOG_PATH)).mkdir(parents=True, exist_ok=True)
 
 
 def positive_integer(arg):
