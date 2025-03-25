@@ -132,7 +132,7 @@ class YafuLineReader:
                     eta = match.group(1)
                 if b1 is not None:
                     self.yafu_progress += f" B1={b1}"
-                if b2 is not None and b2 not in ["gmp-ecm default", "100*"]:
+                if b2 is not None and b2 not in ["gmp-ecm default", "100*B1"]:
                     self.yafu_progress += f" B2={b2}"
                 if curves_done is not None:
                     self.yafu_progress += f" {curves_done}"
@@ -154,7 +154,7 @@ class YafuLineReader:
             match = re.search(r"(\d+) rels found", line)
             if match:
                 self.rels_found = int(match.group(1))
-            match = re.search(r"ETA (\d) sec", line)
+            match = re.search(r"ETA (\d+) sec", line)
             if match:
                 eta = match.group(1)
             self.yafu_progress = "SIQS"
