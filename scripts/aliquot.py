@@ -75,9 +75,12 @@ class YafuLineReader:
         self.composite_str = None
         self.b1 = None
         self.b2 = None
+        self.rels_found = 0
+        self.rels_needed = None
         self.num_digits = gmpy2.num_digits(term)
         self.glyph = "●" if last_term is None else ("▲" if term > last_term else "▼")
         self.yafu_progress = ""
+        self.stage = None
         self.max_yafu_progress = 0
 
 
@@ -99,9 +102,13 @@ class YafuLineReader:
             self._update_composite_str()
 
     def _parse_progress(self, line):
-        if line.startswith("div:"):
+        if "found prp" in line:
+            match = re.search(r"prp(\d+) = (\d+)", line)
+            if match:
+                self._add_factor(match.group(2))
+        elif line.startswith("div:"):
             self.yafu_progress = "DIV"
-            match = re.search("div: found prime factor = (\d+)", line)
+            match = re.search(r"div: found prime factor = (\d+)", line)
             if match:
                 self._add_factor(int(match.group(1)))
         elif line.startswith("fmt:"):
@@ -114,33 +121,48 @@ class YafuLineReader:
                 self.b1 = match.group(1)
             self.yafu_progress = f"PM1 B1={self.b1}" if self.b1 is not None else f"PM1"
         elif line.startswith("ecm:"):
-            if line.startswith("ecm: found prp"):
-                match = re.search(r"prp(\d+) = (\d+)", line)
-                if match:
-                    self._add_factor(match.group(2))
-            else:
-                self.yafu_progress = "ECM"
-                curves_done = curves_planned = cofactor_digits = b1 = b2 = eta = None
-                match = re.search(r"(\d+)/(\d+) curves on C(\d+)[^B]+B1=([^,]+), B2=([^,]+)", line)
-                if match:
-                    curves_done, curves_planned, cofactor_digits, b1, b2 = match.group(1, 2, 3, 4, 5)
-                match = re.search(r"ETA[^0-9]+(\d+) sec", line)
-                if match:
-                    eta = match.group(1)
-                if b1 is not None:
-                    self.yafu_progress += f" B1={b1}"
-                if b2 is not None and b2 != "gmp-ecm default":
-                    self.yafu_progress += f" B2={b2}"
-                if curves_done is not None:
-                    self.yafu_progress += f" {curves_done}"
-                    if curves_planned is not None:
-                        self.yafu_progress += f"/{curves_planned}"
-                if eta is not None:
-                    self.yafu_progress += f" ETA: {eta} sec"
+            self.yafu_progress = "ECM"
+            curves_done = curves_planned = cofactor_digits = b1 = b2 = eta = None
+            match = re.search(r"(\d+)/(\d+) curves on C(\d+)[^B]+B1=([^,]+), B2=([^,\r]+)", line)
+            if match:
+                curves_done, curves_planned, cofactor_digits, b1, b2 = match.group(1, 2, 3, 4, 5)
+            match = re.search(r"ETA[^0-9]+(\d+) sec", line)
+            if match:
+                eta = match.group(1)
+            if b1 is not None:
+                self.yafu_progress += f" B1={b1}"
+            if b2 is not None and b2 not in ["gmp-ecm default", "100*"]:
+                self.yafu_progress += f" B2={b2}"
+            if curves_done is not None:
+                self.yafu_progress += f" {curves_done}"
+                if curves_planned is not None:
+                    self.yafu_progress += f"/{curves_planned}"
+            if eta is not None:
+                self.yafu_progress += f" ETA: {eta} sec"
         elif line.startswith("starting SIQS on"):
-            self.yafu_progress = "SIQS"
+            self.stage = "SIQS"
+        elif line.startswith("==== sieving"):  # siqs rels needed
+            self.stage = "SIQS"
+            match = re.search(r"(\d+) relations needed", line)
+            self.rels_needed = int(match.group(1))
         elif line.startswith("***factors found***"):
             self.yafu_progress = ""
+
+        if self.stage == "SIQS":
+            eta = None
+            match = re.search(r"(\d+) rels found", line)
+            if match:
+                self.rels_found = int(match.group(1))
+            match = re.search(r"ETA (\d) sec")
+            if match:
+                eta = match.group(1)
+            self.yafu_progress = "SIQS"
+            if self.rels_needed is not None:
+                self.yafu_progress += f" {min(1.0, self.rels_found / self.rels_needed):0.1%}"
+            if eta is not None:
+                self.yafu_progress += f" ETA: {eta} sec"
+
+
         self.max_yafu_progress = max(len(self.yafu_progress), self.max_yafu_progress)
 
 
