@@ -121,24 +121,25 @@ class YafuLineReader:
                 self.b1 = match.group(1)
             self.yafu_progress = f"PM1 B1={self.b1}" if self.b1 is not None else f"PM1"
         elif line.startswith("ecm:"):
-            self.yafu_progress = "ECM"
-            curves_done = curves_planned = cofactor_digits = b1 = b2 = eta = None
-            match = re.search(r"(\d+)/(\d+) curves on C(\d+)[^B]+B1=([^,]+), B2=([^,\r]+)", line)
-            if match:
-                curves_done, curves_planned, cofactor_digits, b1, b2 = match.group(1, 2, 3, 4, 5)
-            match = re.search(r"ETA[^0-9]+(\d+) sec", line)
-            if match:
-                eta = match.group(1)
-            if b1 is not None:
-                self.yafu_progress += f" B1={b1}"
-            if b2 is not None and b2 not in ["gmp-ecm default", "100*"]:
-                self.yafu_progress += f" B2={b2}"
-            if curves_done is not None:
-                self.yafu_progress += f" {curves_done}"
-                if curves_planned is not None:
-                    self.yafu_progress += f"/{curves_planned}"
-            if eta is not None:
-                self.yafu_progress += f" ETA: {eta} sec"
+            if not line.startswith("ecm: process took"):
+                self.yafu_progress = "ECM"
+                curves_done = curves_planned = cofactor_digits = b1 = b2 = eta = None
+                match = re.search(r"(\d+)/(\d+) curves on C(\d+)[^B]+B1=([^,]+), B2=([^,\r]+)", line)
+                if match:
+                    curves_done, curves_planned, cofactor_digits, b1, b2 = match.group(1, 2, 3, 4, 5)
+                match = re.search(r"ETA[^0-9]+(\d+) sec", line)
+                if match:
+                    eta = match.group(1)
+                if b1 is not None:
+                    self.yafu_progress += f" B1={b1}"
+                if b2 is not None and b2 not in ["gmp-ecm default", "100*"]:
+                    self.yafu_progress += f" B2={b2}"
+                if curves_done is not None:
+                    self.yafu_progress += f" {curves_done}"
+                    if curves_planned is not None:
+                        self.yafu_progress += f"/{curves_planned}"
+                if eta is not None:
+                    self.yafu_progress += f" ETA: {eta} sec"
         elif line.startswith("starting SIQS on"):
             self.stage = "SIQS"
         elif line.startswith("==== sieving"):  # siqs rels needed
