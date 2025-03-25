@@ -1,3 +1,4 @@
+import logging
 import math
 import sys
 import time
@@ -106,7 +107,7 @@ def report(composite_to_factors_dict, sleep=1):
         response = _get_session().get(REPORT_ENDPOINT, params=payload)
         return response
     except Exception as e:
-        print(e, file=sys.stderr)
+        logging.error(e)
         time.sleep(sleep)
         return report(composite_to_factors_dict, sleep=sleep*2)
 

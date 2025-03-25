@@ -27,7 +27,7 @@ __yafu_dir = config.get_yafu_dir()
 __yafu_bin = config.get_yafu_bin()
 
 
-def factor(expr, stop_after_one=False, report_to_factordb=True, threads=1, work=None, pretest=None):
+def factor(expr, stop_after_one=False, report_to_factordb=True, threads=1, work=None, pretest=None, line_reader=None):
     str_expression = str(expr)
     text = f"{len(str_expression)} char expression: {str_expression[:48] + '...' + str_expression[-48:]}" if len(
         str_expression) > 1000 else expr
@@ -68,13 +68,19 @@ def factor(expr, stop_after_one=False, report_to_factordb=True, threads=1, work=
             popen_arglist.append("-pretest")
             popen_arglist.append(str(pretest))
 
-        proc = subprocess.Popen(popen_arglist, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, cwd=dirpath, bufsize=1)
+        proc = subprocess.Popen(popen_arglist, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, cwd=dirpath)
         input_wrapper = io.TextIOWrapper(proc.stdin, encoding="utf-8", newline='\n')
         input_wrapper.write(f"{str_expr}\n\n")
         input_wrapper.flush()
         input_wrapper.close()
-        for line in io.TextIOWrapper(proc.stdout, encoding="utf-8", newline=''):
-            logger.debug(line)
+        for line in io.TextIOWrapper(proc.stdout, encoding="latin-1", newline=''):
+            if line_reader is not None:
+                line_reader.process_line(line)
+            else:
+                logger.debug(line)
+        if line_reader is not None:
+            # move to next line
+            print()
         proc.wait()
         try:
             with open(os.path.join(dirpath, factors_filename), "r") as factors_file:

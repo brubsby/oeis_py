@@ -402,10 +402,10 @@ def divisors(n, threads=1, work=None, proper=False):
         return [gmpy2.mpz(1)] + ret + [n]
 
 
-def proper_divisors(n, threads=1, work=None):
+def proper_divisors(n, factors=None, threads=1, work=None):
     if n < 2:
         return []
-    factor_dict = factors_as_dict(n, threads=threads, work=work)
+    factor_dict = factors_as_dict(n, factors=factors, threads=threads, work=work)
     factor_powers_lists = [[pow(factor, e) for e in range(exponent+1)] for factor, exponent in factor_dict.items()]
     factor_powers_generator_list = [(factor_power for factor_power in factor_power_list) for factor_power_list in factor_powers_lists]
     this_factor_power_list = [next(factor_powers_generator) for factor_powers_generator in factor_powers_generator_list]
@@ -425,8 +425,8 @@ def proper_divisors(n, threads=1, work=None):
             this_factor_power_list[i] = next(factor_powers_generator_list[i])
 
 
-def aliquot_sum(n, threads=1, work=None):
-    return 1 + sum(proper_divisors(n, threads=threads, work=work))
+def aliquot_sum(n, factors=None, threads=1, work=None):
+    return 1 + sum(proper_divisors(n, factors=factors, threads=threads, work=work))
 
 
 def euclid_mullin(start, index):

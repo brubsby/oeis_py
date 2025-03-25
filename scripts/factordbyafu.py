@@ -11,13 +11,13 @@ import requests
 import random
 import urllib
 from func_timeout import func_timeout, FunctionTimedOut
+from modules import config
 
 import gmpy2
 
 from modules import factor
 
-# no idea why i didn't just make these changes to yafu factor in the library, oh well
-
+__COOKIE__ = config.get_factordb_cookie()
 
 def local_factor(composites, threads=1, work=None, pretest=None, one=None, timeout=None):
     if not timeout:
@@ -88,24 +88,32 @@ def factor_implementation(composites, threads=1, work=None, pretest=None, one=No
         shutil.rmtree(dirpath, ignore_errors=True)
 
 
-def report(composite_factors_tuples):
+def report(composite_factors_tuples, sleep=1):
     payload = "\n".join(["{}={}".format(composite, str([int(factor) for factor in factors])) for composite, factors in composite_factors_tuples])
     logging.info(f"submitting factors:\n{payload}")
     payload = 'report=' + urllib.parse.quote(payload, safe='') + '&format=0'
-    payload = payload.encode('utf-8')
-    temp2 = urllib.request.urlopen('http://factordb.com/report.php', payload)
-    if temp2.status != 200:
-        raise Exception(temp2)
+    temp2 = requests.get('http://factordb.com/report.php?'+payload, cookies={"fdbuser": __COOKIE__})
+    try:
+        temp2.raise_for_status()
+    except Exception as e:
+        logging.exception(e)
+        time.sleep(sleep)
+        report(composite_factors_tuples, sleep=sleep*2)
 
 
-def get_composites_from_factordb(minimum_digits=1, num_composites=100, start_number=0):
-    request = requests.get(f"http://factordb.com/listtype.php?t=3&mindig={minimum_digits}&perpage={num_composites}&start={start_number}&download=1")
-    if not request.ok:
-        raise ConnectionError(f"Problem with request:\n{request.text}")
-    return request.text.strip().split('\n')
+def get_composites_from_factordb(minimum_digits=1, num_composites=100, start_number=0, sleep=1):
+    request = requests.get(f"http://factordb.com/listtype.php?t=3&mindig={minimum_digits}&perpage={num_composites}&start={start_number}&download=1", cookies={"fdbuser": __COOKIE__})
+    try:
+        request.raise_for_status()
+        return request.text.strip().split('\n')
+    except Exception as e:
+        time.sleep(sleep)
+        return get_composites_from_factordb(minimum_digits=minimum_digits, num_composites=num_composites, start_number=start_number, sleep=sleep*2)
+
 
 def get_composites_from_stdin():
     return list(map(int, sys.stdin.readlines())) if not sys.stdin.isatty() else []
+
 
 def get_hardcoded_composites():
     return [
@@ -125,19 +133,17 @@ if __name__ == "__main__":
     if not composites:
         composites = get_hardcoded_composites()
     get_from_factordb = not composites
+    get_num = 1
 
     while True:
         if get_from_factordb and not composites:
-            composites = get_composites_from_factordb(88,1,100)
-        for composite in composites:
-            try:
-                start = time.time()
-                remaining_composites = factor.factordb_get_remaining_composites(composite)
-                if remaining_composites:
-                    local_factor(remaining_composites, threads=16, work=25, one=True)
-                else:
-                    print(f"{composite} fully factored, skipping...")
-            except (FileNotFoundError, UnicodeDecodeError, FunctionTimedOut, urllib.error.HTTPError, requests.exceptions.ConnectionError) as e:
-                logging.error(e)
+            composites = get_composites_from_factordb(0, get_num, random.randint(0, 200))
+            # batch more if the number is smaller
+            get_num = max((80 - gmpy2.num_digits(int(composites[-1]))) * 2, 1)
+        try:
+            start = time.time()
+            local_factor(composites, threads=12, work=0, one=True)
+        except (FileNotFoundError, UnicodeDecodeError, FunctionTimedOut, urllib.error.HTTPError, requests.exceptions.ConnectionError) as e:
+            logging.error(e)
         composites = []
 

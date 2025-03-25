@@ -2,19 +2,24 @@ import argparse
 import datetime
 import itertools
 import logging
+import math
 import os
 import pickle
+import re
 import sqlite3
+import sys
+import time
 
 import gmpy2
 import requests
 
-from modules import factor, factordb
+from logging.handlers import TimedRotatingFileHandler
+
+from modules import yafu, factor, factordb
 
 DB_NAME = "aliquot.db"
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "db", DB_NAME)
-
-logger = logging.getLogger("aliquot_db")
+YAFU_LOG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "logs", f"aliquot-yafu.log")
 
 
 def positive_integer(arg):
@@ -39,6 +44,118 @@ def chunks(lst, n):
     """Yield successive n-sized chunks from lst."""
     for i in range(0, len(lst), n):
         yield lst[i:i + n]
+
+
+def factorize(n, threads=1, yafu_line_reader=None):
+    if type(n) != gmpy2.mpz:
+        n = gmpy2.mpz(n)
+    if n < 2:
+        return []
+    if gmpy2.num_digits(n) >= 50:
+        factor_db_factors = factor.factordb_factor(n, num_retries=0, sleep_time=0)
+        if factor_db_factors != -1:
+            return factor_db_factors
+    return yafu.factor(n, threads=threads, line_reader=yafu_line_reader)
+
+
+def aliquot_sum(n, threads=1, yafu_line_reader=None):
+    return factor.aliquot_sum(n, factors=factorize(n, threads=threads, yafu_line_reader=yafu_line_reader))
+
+
+class YafuLineReader:
+    """Object to handle reading yafu lines to discern progress"""
+    def __init__(self, yafu_file_logger, log_level, term, last_term):
+        self.logger = yafu_file_logger
+        self.log_level = log_level
+        self.term = term
+        self.factors = {}
+        self.remaining_composite = term
+        self.composite_str = None
+        self.b1 = None
+        self.b2 = None
+        self.num_digits = gmpy2.num_digits(term)
+        self.glyph = "●" if last_term is None else ("▲" if term > last_term else "▼")
+        self.yafu_progress = ""
+        self.max_yafu_progress = 0
+
+
+    def _update_composite_str(self):
+        elided = f"{str(self.term)[:6] + '...' + str(self.term)[-6:]}" \
+            if self.num_digits > 15 else self.composite_str
+        factor_str = ".".join([f"{str(p)}^{str(e)}" if e > 1 else (str(p) if gmpy2.num_digits(p) < 10 else f"P{str(gmpy2.num_digits(p))}")
+                                 for p, e in self.factors.items()])
+        self.composite_str = f"{elided} = {factor_str}"
+        if self.remaining_composite > 1:
+            self.composite_str += f".C{gmpy2.num_digits(self.remaining_composite)}"
+
+
+    def _add_factor(self, new_factor):
+        new_factor = gmpy2.mpz(new_factor)
+        if gmpy2.is_divisible(self.remaining_composite, new_factor):
+            self.remaining_composite = self.remaining_composite // new_factor
+            self.factors[new_factor] = self.factors.get(new_factor, 0) + 1
+            self._update_composite_str()
+
+    def _parse_progress(self, line):
+        if line.startswith("div:"):
+            self.yafu_progress = "DIV"
+            match = re.search("div: found prime factor = (\d+)", line)
+            if match:
+                self._add_factor(int(match.group(1)))
+        elif line.startswith("fmt:"):
+            self.yafu_progress = "FMT"
+        elif line.startswith("rho:"):
+            self.yafu_progress = "RHO"
+        elif line.startswith("pm1:"):
+            match = re.search(r"B1 = ([^,]+)", line)
+            if match:
+                self.b1 = match.group(1)
+            self.yafu_progress = f"PM1 B1={self.b1}" if self.b1 is not None else f"PM1"
+        elif line.startswith("ecm:"):
+            if line.startswith("ecm: found prp"):
+                match = re.search(r"prp(\d+) = (\d+)", line)
+                if match:
+                    self._add_factor(match.group(2))
+            else:
+                self.yafu_progress = "ECM"
+                curves_done = curves_planned = cofactor_digits = b1 = b2 = eta = None
+                match = re.search(r"(\d+)/(\d+) curves on C(\d+)[^B]+B1=([^,]+), B2=([^,]+)", line)
+                if match:
+                    curves_done, curves_planned, cofactor_digits, b1, b2 = match.group(1, 2, 3, 4, 5)
+                match = re.search(r"ETA[^0-9]+(\d+) sec", line)
+                if match:
+                    eta = match.group(1)
+                if b1 is not None:
+                    self.yafu_progress += f" B1={b1}"
+                if b2 is not None and b2 != "gmp-ecm default":
+                    self.yafu_progress += f" B2={b2}"
+                if curves_done is not None:
+                    self.yafu_progress += f" {curves_done}"
+                    if curves_planned is not None:
+                        self.yafu_progress += f"/{curves_planned}"
+                if eta is not None:
+                    self.yafu_progress += f" ETA: {eta} sec"
+        elif line.startswith("starting SIQS on"):
+            self.yafu_progress = "SIQS"
+        elif line.startswith("***factors found***"):
+            self.yafu_progress = ""
+        self.max_yafu_progress = max(len(self.yafu_progress), self.max_yafu_progress)
+
+
+    def process_line(self, line):
+        self._parse_progress(line)
+        if self.composite_str is None:
+            self._update_composite_str()
+        if self.log_level <= logging.DEBUG:
+            # if we're debugging, just print out all of the yafu output
+            print(line, end="")
+        else:
+            # otherwise do the cutesy single line progress per composite
+            timestr = datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S')
+            print(f" {timestr} {self.glyph} C{self.num_digits} = {self.composite_str} > {self.yafu_progress: <{self.max_yafu_progress}}\r", end="")
+            # and log the output to a file
+        self.logger.debug(line)
+
 
 
 class AliquotDB:
@@ -223,6 +340,16 @@ if __name__ == "__main__":
         loglevel = logging.DEBUG
     logging.basicConfig(level=loglevel, format="%(message)s")
 
+    logger = logging.getLogger("aliquot")
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(loglevel)
+    handler.terminator = ""
+    formatter = logging.Formatter(
+        fmt='%(asctime)s %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    handler.setFormatter(formatter)
+
     num_threads = args.threads
     composite = args.composite
     smallest_term = args.smallest_term
@@ -236,20 +363,37 @@ if __name__ == "__main__":
     if update:
         db = AliquotDB()
         print(db.get_update_post())
-    elif composite:
+        sys.exit()
+
+    file_logger = logging.getLogger('yafu.log')
+    file_logger_handler = TimedRotatingFileHandler(YAFU_LOG_PATH, when='midnight', backupCount=3)
+    file_logger_handler.terminator = ""
+    file_logger_handler.setFormatter(logging.Formatter('%(message)s'))
+    file_logger.propagate = False
+    file_logger.setLevel(logging.DEBUG)
+    file_logger.addHandler(file_logger_handler)
+
+    if composite:
+        last_term = None
         term = factordb.get_latest_aliquot_term(composite).get_value()
         while True:
-            print(term)
-            term = factor.aliquot_sum(term, threads=num_threads)
+            line_reader = YafuLineReader(file_logger, loglevel, term, last_term)
+            last_term = term
+            term = aliquot_sum(last_term, threads=num_threads, yafu_line_reader=line_reader)
+
     elif smallest_term or smallest_composite:
         db = AliquotDB()
         while True:
-            starting_term = db.get_smallest(term=smallest_term)
+            last_term = None
+            term = db.get_smallest(term=smallest_term)
+            line_reader = YafuLineReader(file_logger, loglevel, term, last_term)
             term_size_target = db.get_term_size_floor() + 1
-            term = starting_term
-            next_term = factor.aliquot_sum(term, threads=num_threads)
-            while gmpy2.num_digits(next_term) <= term_size_target:
-                term = next_term
-                next_term = factor.aliquot_sum(term, threads=num_threads)
+            last_term = term
+            term = aliquot_sum(last_term, threads=num_threads, yafu_line_reader=line_reader)
+            while gmpy2.num_digits(term) <= term_size_target:
+                line_reader = YafuLineReader(file_logger, loglevel, term, last_term)
+                last_term = term
+                term = aliquot_sum(last_term, threads=num_threads, yafu_line_reader=line_reader)
+
 
 
