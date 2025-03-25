@@ -6,6 +6,7 @@ import math
 import os
 import pickle
 import re
+import shutil
 import sqlite3
 import sys
 import time
@@ -188,7 +189,9 @@ class YafuLineReader:
         else:
             # otherwise do the cutesy single line progress per composite
             timestr = datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S')
-            print(f" {timestr} {self.glyph} C{self.num_digits} = {self.composite_str} {'>' if self.yafu_progress.strip() != '' else ' '} {self.yafu_progress: <{self.max_yafu_progress}}\r", end="")
+            termsize = shutil.get_terminal_size().columns
+            outstr = f" {timestr} {self.glyph} C{self.num_digits} = {self.composite_str} {'>' if self.yafu_progress.strip() != '' else ' '} {self.yafu_progress: <{self.max_yafu_progress}}\r"
+            print(f"{outstr[:termsize-2]}.." if len(outstr) > termsize-1 else outstr, end="")
             # and log the output to a file
         self.logger.debug(line)
 
