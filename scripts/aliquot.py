@@ -438,7 +438,7 @@ if __name__ == "__main__":
             last_term = term
             term = aliquot_sum(last_term, threads=num_threads, yafu_line_reader=line_reader)
             while num_digits(term) <= term_size_target:
-                line_reader = YafuLineReader(file_logger, loglevel, term, last_term)
+                line_reader = YafuLineReader(file_logger, loglevel, name, term, last_term)
                 last_term = term
                 term = aliquot_sum(last_term, threads=num_threads, yafu_line_reader=line_reader)
 
