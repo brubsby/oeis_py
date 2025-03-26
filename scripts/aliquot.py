@@ -473,7 +473,7 @@ if __name__ == "__main__":
                 term = aliquot_sum(last_term, threads=num_threads, yafu_line_reader=line_reader)
                 index += 1
                 # factordb will continue sequences below 50 for us
-                if num_digits(term) <= 50:
+                if num_digits(term) < 50:
                     break
 
     elif smallest_term or smallest_composite:
