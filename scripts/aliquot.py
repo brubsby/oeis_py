@@ -54,7 +54,7 @@ def factorize(n, threads=1, yafu_line_reader=None):
         n = gmpy2.mpz(n)
     if n < 2:
         return []
-    if gmpy2.num_digits(n) >= 50:
+    if gmpy2.num_digits(n) >= 60:
         factor_db_factors = factor.factordb_factor(n, num_retries=0, sleep_time=0)
         if factor_db_factors != -1:
             return factor_db_factors
@@ -466,6 +466,9 @@ if __name__ == "__main__":
             last_term = None
             term_fdb, index = factordb.get_latest_aliquot_term(composite)
             term = term_fdb.get_value()
+            if gmpy2.is_prime(term):
+                print("Sequence terminated!")
+                sys.exit()
             while True:
                 name = f"{composite}:i{index}"
                 line_reader = YafuLineReader(file_logger, loglevel, name, term, last_term)
