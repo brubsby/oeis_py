@@ -462,15 +462,19 @@ if __name__ == "__main__":
     file_logger.addHandler(file_logger_handler)
 
     if composite:
-        last_term = None
-        term_fdb, index = factordb.get_latest_aliquot_term(composite)
-        term = term_fdb.get_value()
         while True:
-            name = f"{composite}:i{index}"
-            line_reader = YafuLineReader(file_logger, loglevel, name, term, last_term)
-            last_term = term
-            term = aliquot_sum(last_term, threads=num_threads, yafu_line_reader=line_reader)
-            index += 1
+            last_term = None
+            term_fdb, index = factordb.get_latest_aliquot_term(composite)
+            term = term_fdb.get_value()
+            while True:
+                name = f"{composite}:i{index}"
+                line_reader = YafuLineReader(file_logger, loglevel, name, term, last_term)
+                last_term = term
+                term = aliquot_sum(last_term, threads=num_threads, yafu_line_reader=line_reader)
+                index += 1
+                # factordb will continue sequences below 50 for us
+                if num_digits(term) <= 50:
+                    break
 
     elif smallest_term or smallest_composite:
         db = AliquotDB()
