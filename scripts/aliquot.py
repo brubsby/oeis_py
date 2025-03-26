@@ -21,7 +21,8 @@ from modules import yafu, factor, factordb
 
 DB_NAME = "aliquot.db"
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "db", DB_NAME)
-YAFU_LOG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "logs", f"aliquot-yafu.log")
+YAFU_LOG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "logs", "aliquot-yafu.log")
+UNBOUNDED_20M_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "db", "unbounded_20M.txt")
 Path(os.path.dirname(YAFU_LOG_PATH)).mkdir(parents=True, exist_ok=True)
 
 
@@ -299,6 +300,23 @@ class AliquotDB:
         self.connection.commit()
 
 
+    def get_earliest_under(self, num_digits):
+        cur = self.connection.cursor()
+        cur.execute(f"SELECT * FROM aliquot WHERE reservation = '' AND term_size < ? ORDER BY sequence LIMIT 1;", (num_digits,))
+        rows = cur.fetchall()
+        for row in rows:
+            fdb = None
+            if row[-2] is not None:
+                fdb = factordb.FactorDB(row[-2], is_id=True)
+                fdb.connect()
+            if fdb is None or fdb.get_status() == 'FF':
+                # sequence entry out of date, update this one and requery the db for the earliest
+                self.update_sequence(row[0])
+                return self.get_earliest_under(num_digits)
+            else:
+                return fdb, row
+
+
 
     def get_smallest(self, term=True):
         cur = self.connection.cursor()
@@ -310,9 +328,11 @@ class AliquotDB:
         cur.execute(f"SELECT * FROM aliquot WHERE reservation = '' ORDER BY {ordering};")
         rows = cur.fetchall()
         for row in rows:
-            fdb = factordb.FactorDB(row[-2], is_id=True)
-            fdb.connect()
-            if fdb.get_status() == 'FF':
+            fdb = None
+            if row[-2] is not None:
+                fdb = factordb.FactorDB(row[-2], is_id=True)
+                fdb.connect()
+            if fdb is None or fdb.get_status() == 'FF':
                 # sequence entry out of date, update this one and requery the db for the smallest
                 self.update_sequence(row[0])
                 return self.get_smallest(term=term)
@@ -327,7 +347,7 @@ class AliquotDB:
         val = row[0]
         return val
 
-    def fetch_data(self):
+    def fetch_blue_page_data(self):
         response = requests.get("https://www.rechenkraft.net/aliquot/AllSeq.json")
         response.raise_for_status()
         data_list = response.json()["aaData"]
@@ -354,6 +374,19 @@ class AliquotDB:
             WHERE (reservation != excluded.reservation) OR last_updated < excluded.last_updated;
         """, data_list)
         self.connection.commit()
+
+
+    def insert_unbounded_20m_data(self):
+        cur = self.connection.cursor()
+        unbounded_20m_data_regex = r"Sequence (\d+) to (\d+) digits"
+        with open(UNBOUNDED_20M_PATH) as f:
+            cur.executemany("""
+            INSERT INTO aliquot(sequence, term_size) VALUES (?, ?)
+            ON CONFLICT(sequence) DO NOTHING;
+            """, map(lambda match: match.group(1, 2),
+                     filter(None, map(lambda line: re.search(unbounded_20m_data_regex, line), f.readlines()))))
+        self.connection.commit()
+
 
 
     def get_update_post(self):
@@ -391,6 +424,15 @@ if __name__ == "__main__":
         default=os.cpu_count(),
         help="number of threads to use in yafu",
     )
+    earliest_group = parser.add_argument_group()
+    parser.add_argument(
+        "-d",
+        "--digit-limit",
+        action="store",
+        dest="digit_limit",
+        type=positive_integer,
+        help="digit limit under which to continue a factoring a sequence",
+    )
     parser.add_argument(
         "--update",
         action="store_true",
@@ -400,17 +442,24 @@ if __name__ == "__main__":
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "-e",
+        "--earliest-sequence",
+        action="store_true",
+        dest="earliest_sequence",
+        help="run yafu on the earliest sequences in the database",
+    )
+    group.add_argument(
+        "-r",
         "--smallest-term",
         action="store_true",
         dest="smallest_term",
-        help="run yafu on the smallest terms on the blue page",
+        help="run yafu on the smallest terms in the database",
     )
     group.add_argument(
         "-c",
         "--smallest-composite",
         action="store_true",
         dest="smallest_composite",
-        help="run yafu on the smallest composites on the blue page",
+        help="run yafu on the smallest composites in the database",
     )
     group.add_argument(
         "-q"
@@ -437,19 +486,21 @@ if __name__ == "__main__":
     )
     handler.setFormatter(formatter)
 
+    db = AliquotDB()
+
     num_threads = args.threads
     composite = args.composite
+    earliest_sequence = args.earliest_sequence
     smallest_term = args.smallest_term
     smallest_composite = args.smallest_composite
     update = args.update
     fetch = args.fetch
+    digit_limit = args.digit_limit if args.digit_limit else db.get_term_size_floor()
 
     if fetch:
-        db = AliquotDB()
         print("Fetching data from the blue page...")
-        db.fetch_data()
+        db.fetch_blue_page_data()
     if update:
-        db = AliquotDB()
         print(db.get_update_post())
         sys.exit()
 
@@ -479,26 +530,28 @@ if __name__ == "__main__":
                 if num_digits(term) < 50:
                     break
 
-    elif smallest_term or smallest_composite:
-        db = AliquotDB()
+    elif smallest_term or smallest_composite or earliest_sequence:
         while True:
             last_term = None
-            term_fdb, row = db.get_smallest(term=smallest_term)
+            if smallest_term or smallest_composite:
+                term_fdb, row = db.get_smallest(term=smallest_term)
+            else:
+                term_fdb, row = db.get_earliest_under(digit_limit)
             term = term_fdb.get_value()
             seq = row[0]
             index = row[1]
             # TODO consider extracting the partial factorization for factordb
             name = f"{seq}:i{index}"
             line_reader = YafuLineReader(file_logger, loglevel, name, term, last_term)
-            term_size_target = db.get_term_size_floor()
             last_term = term
             term = aliquot_sum(last_term, threads=num_threads, yafu_line_reader=line_reader)
-            while num_digits(term) <= term_size_target:
+            while num_digits(term) <= digit_limit:
+                if num_digits(term) < 50:
+                    last_term = None
+                    term_fdb, index = factordb.get_latest_aliquot_term(seq)
+                    term = term_fdb.get_value()
                 index += 1
                 name = f"{seq}:i{index}"
                 line_reader = YafuLineReader(file_logger, loglevel, name, term, last_term)
                 last_term = term
                 term = aliquot_sum(last_term, threads=num_threads, yafu_line_reader=line_reader)
-
-
-
