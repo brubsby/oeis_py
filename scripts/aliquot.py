@@ -185,6 +185,7 @@ class YafuLineReader:
                 match = re.search(r"found (\d+) relations", line)
                 if match:
                     self.rels_found = int(match.group(1))
+                    self.total_yield = 0
                 match = re.search(r"[Tt]otal yield: (\d+)", line)
                 if match:
                     self.total_yield = int(match.group(1))
@@ -466,9 +467,10 @@ if __name__ == "__main__":
         term = term_fdb.get_value()
         while True:
             name = f"{composite}:i{index}"
-            line_reader = YafuLineReader(file_logger, loglevel, composite, term, last_term)
+            line_reader = YafuLineReader(file_logger, loglevel, name, term, last_term)
             last_term = term
             term = aliquot_sum(last_term, threads=num_threads, yafu_line_reader=line_reader)
+            index += 1
 
     elif smallest_term or smallest_composite:
         db = AliquotDB()
