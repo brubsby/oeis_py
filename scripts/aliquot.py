@@ -466,7 +466,7 @@ if __name__ == "__main__":
             last_term = None
             term_fdb, index = factordb.get_latest_aliquot_term(composite)
             term = term_fdb.get_value()
-            if gmpy2.is_prime(term):
+            if term_fdb.get_status()  in ["P", "PRP", "Prp"]:
                 print("Sequence terminated!")
                 sys.exit()
             while True:
