@@ -82,11 +82,13 @@ class YafuLineReader:
         self.b1 = None
         self.b2 = None
         self.rels_found = 0
+        self.total_yield = 0
         self.rels_needed = None
         self.num_digits = num_digits(term)
         self.glyph = "●" if last_term is None else ("▲" if term > last_term else "▼")
         self.yafu_progress = ""
         self.stage = None
+        self.secondary_stage = None
         self.max_yafu_progress = 0
 
 
@@ -151,7 +153,11 @@ class YafuLineReader:
         elif line.startswith("==== sieving"):  # siqs rels needed
             self.stage = "SIQS"
             match = re.search(r"(\d+) relations needed", line)
-            self.rels_needed = int(match.group(1))
+            if match:
+                self.rels_needed = int(match.group(1))
+        elif line.startswith("nfs: commencing nfs on"):
+            self.stage = "NFS"
+            self.secondary_stage = "polysel"
 
         if self.stage == "SIQS":
             eta = None
@@ -166,6 +172,46 @@ class YafuLineReader:
                 self.yafu_progress += f" {min(1.0, self.rels_found / self.rels_needed):0.1%}"
             if eta is not None:
                 self.yafu_progress += f" ETA: {eta} sec"
+        elif self.stage == "NFS":
+            percent = eta = None
+            if "poly select done" in line:
+                self.secondary_stage = "sieving"
+            elif line.startswith("nfs: commencing msieve filtering"):
+                self.secondary_stage = "filtering"
+            elif line.startswith("linear algebra"):
+                self.secondary_stage = "LA"
+
+            if self.secondary_stage == "sieving":
+                match = re.search(r"found (\d+) relations", line)
+                if match:
+                    self.rels_found = int(match.group(1))
+                match = re.search(r"[Tt]otal yield: (\d+)", line)
+                if match:
+                    self.total_yield = int(match.group(1))
+                match = re.search(r"need at least (\d+)", line)
+                if match:
+                    self.rels_needed = int(match.group(1))
+                match = re.search(r"ETA: (\d+h \d+m)", line)
+                if match:
+                    eta = match.group(1)
+                if self.rels_needed is not None:
+                    percent = f"{min(1.0, (self.rels_found + self.total_yield) / self.rels_needed):0.1%}"
+            elif self.secondary_stage == "filtering":
+                if line.startswith("nfs: raising min_rels"):
+                    match = re.search(r"percent to (\d)+", line)
+                    if match:
+                        self.rels_needed = int(match.group(1))
+                    self.secondary_stage = "sieving"
+            elif self.secondary_stage == "LA":
+                match = re.search(r"(\d{1,2}\.\d%), ETA (\d+h \d+m)", line)
+                if match:
+                    percent, eta = match.group(1, 2)
+            self.yafu_progress = f"NFS {self.secondary_stage}"
+            if percent is not None:
+                self.yafu_progress += f" {percent}"
+            if eta is not None:
+                self.yafu_progress += f" ETA: {eta}"
+
 
         if line.startswith("***factors found***"):
             self.stage = "finishing"
@@ -194,7 +240,8 @@ class YafuLineReader:
             outstr = f" {timestr} {self.name} {self.glyph} C{self.num_digits}.{str(self.term)[:2]} = {self.composite_str} {'>' if self.yafu_progress.strip() != '' else ' '} {self.yafu_progress: <{self.max_yafu_progress}}\r"
             print(f"{outstr[:termsize-1]}\r" if len(outstr) > termsize-1 else outstr, end="")
             # and log the output to a file
-        self.logger.debug(line)
+        if line[-1] != "\r":
+            self.logger.debug(line)
 
 
 
@@ -434,7 +481,7 @@ if __name__ == "__main__":
             # TODO consider extracting the partial factorization for factordb
             name = f"{seq}:i{index}"
             line_reader = YafuLineReader(file_logger, loglevel, name, term, last_term)
-            term_size_target = db.get_term_size_floor() + 1
+            term_size_target = db.get_term_size_floor()
             last_term = term
             term = aliquot_sum(last_term, threads=num_threads, yafu_line_reader=line_reader)
             while num_digits(term) <= term_size_target:
