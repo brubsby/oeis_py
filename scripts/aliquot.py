@@ -290,13 +290,17 @@ class AliquotDB:
         composite_size = num_digits(latest_term_fdb.get_factor_list()[-1])
         term_id = latest_term_fdb.get_id()
         cur = self.connection.cursor()
-        # TODO calculate new info instead of NULL
-        cur.execute("""
-        UPDATE aliquot
-        SET sequence_index = ?, term_size = ?, composite_size = ?, leading_id = ?,
-        guide = NULL, class = NULL, abundance = NULL, known_factors = NULL, progress = NULL, is_driver = NULL
-        WHERE sequence = ?;
-        """, (index, term_size, composite_size, term_id, sequence))
+        if latest_term_fdb.get_status() in ["P", "PRP", "Prp"]:
+            cur.execute("DELETE FROM aliquot WHERE sequence = ?", (sequence,))
+            print(f"{sequence} terminates!")
+        else:
+            # TODO calculate new info instead of NULL
+            cur.execute("""
+            UPDATE aliquot
+            SET sequence_index = ?, term_size = ?, composite_size = ?, leading_id = ?,
+            guide = NULL, class = NULL, abundance = NULL, known_factors = NULL, progress = NULL, is_driver = NULL
+            WHERE sequence = ?;
+            """, (index, term_size, composite_size, term_id, sequence))
         self.connection.commit()
 
 
@@ -550,6 +554,11 @@ if __name__ == "__main__":
                     last_term = None
                     term_fdb, index = factordb.get_latest_aliquot_term(seq)
                     term = term_fdb.get_value()
+                    if term_fdb.get_status() in ["P", "PRP", "Prp"]:
+                        print(f"{seq} terminated at {term}!")
+                        break
+                    if num_digits(term) <= digit_limit:
+                        break
                 index += 1
                 name = f"{seq}:i{index}"
                 line_reader = YafuLineReader(file_logger, loglevel, name, term, last_term)
