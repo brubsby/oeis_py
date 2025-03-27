@@ -2,14 +2,12 @@ import argparse
 import datetime
 import itertools
 import logging
-import math
 import os
 import pickle
 import re
 import shutil
 import sqlite3
 import sys
-import time
 
 import gmpy2
 import requests
@@ -55,15 +53,20 @@ def factorize(n, threads=1, yafu_line_reader=None):
         n = gmpy2.mpz(n)
     if n < 2:
         return []
-    if gmpy2.num_digits(n) >= 60:
+    if gmpy2.num_digits(n) >= 70:
         factor_db_factors = factor.factordb_factor(n, num_retries=0, sleep_time=0)
         if factor_db_factors != -1:
             return factor_db_factors
     return yafu.factor(n, threads=threads, line_reader=yafu_line_reader)
 
 
-def aliquot_sum(n, threads=1, yafu_line_reader=None):
-    return factor.aliquot_sum(n, factors=factorize(n, threads=threads, yafu_line_reader=yafu_line_reader))
+def aliquot_sum(n, threads=1, yafu_line_reader=None, report_function=None):
+    factors = factorize(n, threads=threads, yafu_line_reader=yafu_line_reader)
+    if report_function is None:
+        factordb.report({n: factors})
+    else:
+        report_function({n: factors})
+    return factor.aliquot_sum(n, factors=factors)
 
 
 def num_digits(n):
@@ -91,6 +94,7 @@ class YafuLineReader:
         self.stage = None
         self.secondary_stage = None
         self.max_yafu_progress = 0
+        self.process_line("")
 
 
     def _update_composite_str(self):
@@ -242,7 +246,7 @@ class YafuLineReader:
             outstr = f" {timestr} {self.name} {self.glyph} C{self.num_digits}.{str(self.term)[:2]} = {self.composite_str} {'>' if self.yafu_progress.strip() != '' else ' '} {self.yafu_progress: <{self.max_yafu_progress}}\r"
             print(f"{outstr[:termsize-1]}\r" if len(outstr) > termsize-1 else outstr, end="")
             # and log the output to a file
-        if line[-1] != "\r":
+        if line and line[-1] != "\r":
             self.logger.debug(line)
 
 
@@ -516,19 +520,21 @@ if __name__ == "__main__":
     file_logger.setLevel(logging.DEBUG)
     file_logger.addHandler(file_logger_handler)
 
+    factordb_report_pool = factordb.ReportThreadPool()
+
     if composite:
         while True:
             last_term = None
             term_fdb, index = factordb.get_latest_aliquot_term(composite)
             term = term_fdb.get_value()
-            if term_fdb.get_status()  in ["P", "PRP", "Prp"]:
+            if term_fdb.get_status() in ["P", "PRP", "Prp"]:
                 print("Sequence terminated!")
                 sys.exit()
             while True:
                 name = f"{composite}:i{index}"
                 line_reader = YafuLineReader(file_logger, loglevel, name, term, last_term)
                 last_term = term
-                term = aliquot_sum(last_term, threads=num_threads, yafu_line_reader=line_reader)
+                term = aliquot_sum(last_term, threads=num_threads, yafu_line_reader=line_reader, report_function=factordb_report_pool.report)
                 index += 1
                 # factordb will continue sequences below 50 for us
                 if num_digits(term) < 50:
@@ -548,7 +554,7 @@ if __name__ == "__main__":
             name = f"{seq}:i{index}"
             line_reader = YafuLineReader(file_logger, loglevel, name, term, last_term)
             last_term = term
-            term = aliquot_sum(last_term, threads=num_threads, yafu_line_reader=line_reader)
+            term = aliquot_sum(last_term, threads=num_threads, yafu_line_reader=line_reader, report_function=factordb_report_pool.report)
             while num_digits(term) <= digit_limit:
                 if num_digits(term) < 50:
                     last_term = None
@@ -557,10 +563,10 @@ if __name__ == "__main__":
                     if term_fdb.get_status() in ["P", "PRP", "Prp"]:
                         print(f"{seq} terminated at {term}!")
                         break
-                    if num_digits(term) <= digit_limit:
+                    if num_digits(term) > digit_limit:
                         break
                 index += 1
                 name = f"{seq}:i{index}"
                 line_reader = YafuLineReader(file_logger, loglevel, name, term, last_term)
                 last_term = term
-                term = aliquot_sum(last_term, threads=num_threads, yafu_line_reader=line_reader)
+                term = aliquot_sum(last_term, threads=num_threads, yafu_line_reader=line_reader, report_function=factordb_report_pool.report)

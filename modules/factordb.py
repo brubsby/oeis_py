@@ -1,3 +1,4 @@
+import concurrent.futures.thread
 import logging
 import math
 import sys
@@ -13,6 +14,7 @@ REPORT_ENDPOINT = "http://factordb.com/report.php"
 ENDPOINT = "http://factordb.com/api"
 SEQUENCE_ENDPOINT = f"https://factordb.com/sequences.php"
 _session = None
+logger = logging.getLogger("factordb")
 
 
 def _get_session():
@@ -97,6 +99,41 @@ class FactorDB():
         return sorted([y for x in ml for y in x])
 
 
+class ReportThreadPool:
+    """
+    We don't necessarily care what the report has to say, just that it happens, so why not have a queue
+    and move on with our lives
+    """
+
+    def __init__(self, max_workers=5):
+        self.max_workers = max_workers
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers)
+        self.future_pool = []
+
+    def __del__(self):
+        self.executor.shutdown()
+
+    def _report(self, composite_to_factors_dict, sleep=1):
+        payload = {
+            "report": "\n".join([f"{int(composite)}={list(map(int, factors))}" for composite, factors in
+                                 composite_to_factors_dict.items()]),
+            "format": "0"
+        }
+        try:
+            response = _get_session().get(REPORT_ENDPOINT, params=payload)
+            return response
+        except Exception as e:
+            logger.error(e)
+            time.sleep(sleep)
+            return report(composite_to_factors_dict, sleep=sleep * 2)
+
+    def report(self, composite_to_factors_dict, sleep=1):
+        if len(self.future_pool) >= self.max_workers:
+            concurrent.futures.wait((self.future_pool[0],))
+            del self.future_pool[0]
+        future = self.executor.submit(self._report, self, composite_to_factors_dict, sleep)
+        self.future_pool.append(future)
+
 
 def report(composite_to_factors_dict, sleep=1):
     payload = {
@@ -107,7 +144,7 @@ def report(composite_to_factors_dict, sleep=1):
         response = _get_session().get(REPORT_ENDPOINT, params=payload)
         return response
     except Exception as e:
-        logging.error(e)
+        logger.error(e)
         time.sleep(sleep)
         return report(composite_to_factors_dict, sleep=sleep*2)
 
@@ -122,7 +159,7 @@ def get_latest_aliquot_term(composite, sleep=1):
         response = _get_session().get(SEQUENCE_ENDPOINT, params=payload)
         response.raise_for_status()
     except Exception as e:
-        print(e, file=sys.stderr)
+        logger.error(e)
         time.sleep(sleep)
         return get_latest_aliquot_term(composite, sleep=sleep * 2)
     if response and response.ok:
