@@ -294,7 +294,9 @@ class AliquotDB:
         composite_size = num_digits(latest_term_fdb.get_factor_list()[-1])
         term_id = latest_term_fdb.get_id()
         cur = self.connection.cursor()
-        if latest_term_fdb.get_status() in ["P", "PRP", "Prp"]:
+        # if term size is less than 50 after query, sequence probably has a cycle
+        # fdb autocompletes sequences under 50 digits
+        if latest_term_fdb.get_status() in ["P", "PRP", "Prp"] or term_size < 45:
             cur.execute("DELETE FROM aliquot WHERE sequence = ?", (sequence,))
             print(f"{sequence} terminates!")
         else:
@@ -308,9 +310,10 @@ class AliquotDB:
         self.connection.commit()
 
 
-    def get_earliest_under(self, num_digits):
+    def get_earliest_under(self, num_digits, offset=None):
         cur = self.connection.cursor()
-        cur.execute(f"SELECT * FROM aliquot WHERE reservation = '' AND term_size < ? ORDER BY sequence LIMIT 1;", (num_digits,))
+        cur.execute(f"SELECT * FROM aliquot WHERE reservation = '' AND term_size < ? ORDER BY sequence LIMIT 1 OFFSET ?;",
+                    (num_digits, offset if offset else 0))
         rows = cur.fetchall()
         for row in rows:
             fdb = None
@@ -320,20 +323,20 @@ class AliquotDB:
             if fdb is None or fdb.get_status() == 'FF':
                 # sequence entry out of date, update this one and requery the db for the earliest
                 self.update_sequence(row[0])
-                return self.get_earliest_under(num_digits)
+                return self.get_earliest_under(num_digits, offset=offset)
             else:
                 return fdb, row
 
 
 
-    def get_smallest(self, term=True):
+    def get_smallest(self, term=True, offset=None):
         cur = self.connection.cursor()
         ordering_clauses = ['term_size ASC', 'composite_size ASC']
         ordering_clauses = ordering_clauses if term else list(reversed(ordering_clauses))
         # higher classes have lower stability
         ordering_clauses.append('class DESC')
         ordering = ', '.join(ordering_clauses)
-        cur.execute(f"SELECT * FROM aliquot WHERE reservation = '' ORDER BY {ordering};")
+        cur.execute(f"SELECT * FROM aliquot WHERE reservation = '' ORDER BY {ordering} LIMIT 1 OFFSET {str(offset) if offset else '0'};")
         rows = cur.fetchall()
         for row in rows:
             fdb = None
@@ -343,7 +346,7 @@ class AliquotDB:
             if fdb is None or fdb.get_status() == 'FF':
                 # sequence entry out of date, update this one and requery the db for the smallest
                 self.update_sequence(row[0])
-                return self.get_smallest(term=term)
+                return self.get_smallest(term=term, offset=offset)
             else:
                 return fdb, row
 
@@ -432,7 +435,6 @@ if __name__ == "__main__":
         default=os.cpu_count(),
         help="number of threads to use in yafu",
     )
-    earliest_group = parser.add_argument_group()
     parser.add_argument(
         "-d",
         "--digit-limit",
@@ -476,6 +478,14 @@ if __name__ == "__main__":
         dest="composite",
         help="specific composite to start on",
     )
+    parser.add_argument(
+        "-o",
+        "--offset",
+        action="store",
+        dest="offset",
+        type=positive_integer,
+        help="offset from which to choose a sequence from a query, helps for parallelizing work on the same query",
+    )
     args = parser.parse_args()
     loglevel = logging.WARNING
     if args.verbose > 0:
@@ -503,6 +513,7 @@ if __name__ == "__main__":
     smallest_composite = args.smallest_composite
     update = args.update
     fetch = args.fetch
+    offset = args.offset
     digit_limit = args.digit_limit if args.digit_limit else db.get_term_size_floor()
 
     if fetch:
@@ -544,9 +555,9 @@ if __name__ == "__main__":
         while True:
             last_term = None
             if smallest_term or smallest_composite:
-                term_fdb, row = db.get_smallest(term=smallest_term)
+                term_fdb, row = db.get_smallest(term=smallest_term, offset=offset)
             else:
-                term_fdb, row = db.get_earliest_under(digit_limit)
+                term_fdb, row = db.get_earliest_under(digit_limit, offset=offset)
             term = term_fdb.get_value()
             seq = row[0]
             index = row[1]
