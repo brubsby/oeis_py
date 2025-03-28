@@ -45,7 +45,8 @@ class FactorDB():
             return self.result
         try:
             self.result = _get_session().get(ENDPOINT, params={"query": str(self.n)} if self.n else {"id": str(self.id)})
-        except requests.exceptions.ConnectionError:
+            self.result.json()
+        except (requests.exceptions.ConnectionError, requests.exceptions.JSONDecodeError):
             time.sleep(sleep)
             return self.connect(reconnect, sleep * 2)
         return self.result

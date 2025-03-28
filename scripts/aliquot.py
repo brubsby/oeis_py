@@ -53,7 +53,7 @@ def factorize(n, threads=1, yafu_line_reader=None):
         n = gmpy2.mpz(n)
     if n < 2:
         return []
-    if gmpy2.num_digits(n) >= 70:
+    if gmpy2.num_digits(n) >= 80:
         factor_db_factors = factor.factordb_factor(n, num_retries=0, sleep_time=0)
         if factor_db_factors != -1:
             return factor_db_factors
