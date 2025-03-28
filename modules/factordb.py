@@ -50,7 +50,7 @@ class FactorDB():
         except (requests.exceptions.ConnectionError, requests.exceptions.JSONDecodeError, json.decoder.JSONDecodeError) as e:
             logger.error(e)
             time.sleep(sleep)
-            return self.connect(reconnect, sleep * 2)
+            return self.connect(True, sleep * 2)
         return self.result
 
     def requery(self):
