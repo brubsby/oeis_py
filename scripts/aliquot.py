@@ -253,7 +253,7 @@ class YafuLineReader:
             # otherwise do the cutesy single line progress per composite
             timestr = datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S')
             termsize = shutil.get_terminal_size().columns
-            self.outstr = f" {timestr} {self.name} {self.glyph} C{self.num_digits}.{str(self.term)[:2]} = {self.composite_str}"
+            self.outstr = f" {timestr} {self.name : <13} {self.glyph} C{self.num_digits}.{str(self.term)[:2]} = {self.composite_str}"
             if not self.plain:
                 outstr = f"{self.outstr} {'>' if self.yafu_progress.strip() != '' else ' '} {self.yafu_progress: <{self.max_yafu_progress}}\r"
                 print(f"{outstr[:termsize-1]}\r" if len(outstr) > termsize-1 else outstr, end="")
