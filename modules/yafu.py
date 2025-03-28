@@ -77,11 +77,10 @@ def factor(expr, stop_after_one=False, report_to_factordb=True, threads=1, work=
             if line_reader is not None:
                 line_reader.process_line(line)
             else:
-                logger.debug(line)
-        if line_reader is not None:
-            # move to next line
-            print()
+                logger.debug(line[:-1])
         proc.wait()
+        if line_reader is not None:
+            line_reader.done()
         try:
             with open(os.path.join(dirpath, factors_filename), "r") as factors_file:
                 lines = factors_file.readlines()

@@ -20,7 +20,7 @@ from modules import yafu, factor, factordb
 
 DB_NAME = "aliquot.db"
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "db", DB_NAME)
-YAFU_LOG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "logs", f"aliquot-yafu-{int(time.time())}.log")
+YAFU_LOG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "logs", f"aliquot-yafu-{time.time()}.log")
 UNBOUNDED_20M_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "db", "unbounded_20M.txt")
 Path(os.path.dirname(YAFU_LOG_PATH)).mkdir(parents=True, exist_ok=True)
 
@@ -83,11 +83,12 @@ def num_digits(n):
 
 class YafuLineReader:
     """Object to handle reading yafu lines to discern progress"""
-    def __init__(self, yafu_file_logger, log_level, name, term, last_term):
+    def __init__(self, yafu_file_logger, log_level, name, term, last_term, plain=False):
         self.logger = yafu_file_logger
         self.log_level = log_level
         self.name = name
         self.term = term
+        self.plain = plain
         self.factors = {}
         self.remaining_composite = term
         self.composite_str = None
@@ -103,6 +104,7 @@ class YafuLineReader:
         self.secondary_stage = None
         self.max_yafu_progress = 0
         self.process_line("")
+        self.has_printed_plain = False
 
 
     def _update_composite_str(self):
@@ -251,11 +253,20 @@ class YafuLineReader:
             # otherwise do the cutesy single line progress per composite
             timestr = datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S')
             termsize = shutil.get_terminal_size().columns
-            outstr = f" {timestr} {self.name} {self.glyph} C{self.num_digits}.{str(self.term)[:2]} = {self.composite_str} {'>' if self.yafu_progress.strip() != '' else ' '} {self.yafu_progress: <{self.max_yafu_progress}}\r"
-            print(f"{outstr[:termsize-1]}\r" if len(outstr) > termsize-1 else outstr, end="")
+            self.outstr = f" {timestr} {self.name} {self.glyph} C{self.num_digits}.{str(self.term)[:2]} = {self.composite_str}"
+            if not self.plain:
+                outstr = f"{self.outstr} {'>' if self.yafu_progress.strip() != '' else ' '} {self.yafu_progress: <{self.max_yafu_progress}}\r"
+                print(f"{outstr[:termsize-1]}\r" if len(outstr) > termsize-1 else outstr, end="")
             # and log the output to a file
         if line and line[-1] != "\r":
             self.logger.debug(line)
+
+    def done(self):
+        if self.plain:
+            print(self.outstr)
+            self.has_printed_plain = True
+        if not self.has_printed_plain:
+            print()
 
 
 
@@ -494,6 +505,13 @@ if __name__ == "__main__":
         type=nonnegative_integer,
         help="offset from which to choose a sequence from a query, helps for parallelizing work on the same query",
     )
+    parser.add_argument(
+        "-p",
+        "--plain",
+        action="store_true",
+        dest="plain",
+        help="only output a line when it is done, no carriage return"
+    )
     args = parser.parse_args()
     loglevel = logging.WARNING
     if args.verbose > 0:
@@ -523,6 +541,7 @@ if __name__ == "__main__":
     fetch = args.fetch
     offset = args.offset
     digit_limit = args.digit_limit if args.digit_limit else db.get_term_size_floor()
+    plain = args.plain
 
     if fetch:
         print("Fetching data from the blue page...")
@@ -551,7 +570,7 @@ if __name__ == "__main__":
                 sys.exit()
             while True:
                 name = f"{composite}:i{index}"
-                line_reader = YafuLineReader(file_logger, loglevel, name, term, last_term)
+                line_reader = YafuLineReader(file_logger, loglevel, name, term, last_term, plain=plain)
                 last_term = term
                 term = aliquot_sum(last_term, threads=num_threads, yafu_line_reader=line_reader, report_function=factordb_report_pool.report)
                 index += 1
@@ -571,7 +590,7 @@ if __name__ == "__main__":
             index = row[1]
             # TODO consider extracting the partial factorization for factordb
             name = f"{seq}:i{index}"
-            line_reader = YafuLineReader(file_logger, loglevel, name, term, last_term)
+            line_reader = YafuLineReader(file_logger, loglevel, name, term, last_term, plain=plain)
             last_term = term
             term = aliquot_sum(last_term, threads=num_threads, yafu_line_reader=line_reader, report_function=factordb_report_pool.report)
             while num_digits(term) <= digit_limit:
@@ -586,6 +605,6 @@ if __name__ == "__main__":
                         break
                 index += 1
                 name = f"{seq}:i{index}"
-                line_reader = YafuLineReader(file_logger, loglevel, name, term, last_term)
+                line_reader = YafuLineReader(file_logger, loglevel, name, term, last_term, plain=plain)
                 last_term = term
                 term = aliquot_sum(last_term, threads=num_threads, yafu_line_reader=line_reader, report_function=factordb_report_pool.report)
