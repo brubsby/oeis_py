@@ -8,18 +8,19 @@ import re
 import shutil
 import sqlite3
 import sys
+import time
 
 import gmpy2
 import requests
 
-from logging.handlers import TimedRotatingFileHandler
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from modules import yafu, factor, factordb
 
 DB_NAME = "aliquot.db"
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "db", DB_NAME)
-YAFU_LOG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "logs", "aliquot-yafu.log")
+YAFU_LOG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "logs", f"aliquot-yafu-{int(time.time())}.log")
 UNBOUNDED_20M_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "db", "unbounded_20M.txt")
 Path(os.path.dirname(YAFU_LOG_PATH)).mkdir(parents=True, exist_ok=True)
 
@@ -27,6 +28,13 @@ Path(os.path.dirname(YAFU_LOG_PATH)).mkdir(parents=True, exist_ok=True)
 def positive_integer(arg):
     val = int(arg)
     if val < 1:
+        raise ValueError(f"{arg} not a positive integer")
+    return val
+
+
+def nonnegative_integer(arg):
+    val = int(arg)
+    if val < 0:
         raise ValueError(f"{arg} not a positive integer")
     return val
 
@@ -483,7 +491,7 @@ if __name__ == "__main__":
         "--offset",
         action="store",
         dest="offset",
-        type=positive_integer,
+        type=nonnegative_integer,
         help="offset from which to choose a sequence from a query, helps for parallelizing work on the same query",
     )
     args = parser.parse_args()
@@ -524,7 +532,7 @@ if __name__ == "__main__":
         sys.exit()
 
     file_logger = logging.getLogger('yafu.log')
-    file_logger_handler = TimedRotatingFileHandler(YAFU_LOG_PATH, when='midnight', backupCount=3)
+    file_logger_handler = RotatingFileHandler(YAFU_LOG_PATH, maxBytes=int(1e7), backupCount=3)
     file_logger_handler.terminator = ""
     file_logger_handler.setFormatter(logging.Formatter('%(message)s'))
     file_logger.propagate = False

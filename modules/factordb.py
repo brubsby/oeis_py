@@ -4,6 +4,7 @@ import logging
 import math
 import sys
 import time
+import json
 from lxml import html
 
 import gmpy2
@@ -46,7 +47,8 @@ class FactorDB():
         try:
             self.result = _get_session().get(ENDPOINT, params={"query": str(self.n)} if self.n else {"id": str(self.id)})
             self.result.json()
-        except (requests.exceptions.ConnectionError, requests.exceptions.JSONDecodeError):
+        except (requests.exceptions.ConnectionError, requests.exceptions.JSONDecodeError, json.decoder.JSONDecodeError) as e:
+            logger.error(e)
             time.sleep(sleep)
             return self.connect(reconnect, sleep * 2)
         return self.result
