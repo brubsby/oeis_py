@@ -160,12 +160,14 @@ dats/
 trash/
 notes/
 temp/
-data/ini/
 
 pfgw.ini
 *.ptr
 scratch.py
 /data/db/
 /data/logs/
+/data/ini/
+/data/elf/
+/data/aliquot/
 is_prime_benchmarking.py
 /sequences/T*.py

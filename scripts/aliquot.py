@@ -21,7 +21,7 @@ from modules import yafu, factor, factordb
 DB_NAME = "aliquot.db"
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "db", DB_NAME)
 YAFU_LOG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "logs", f"aliquot-yafu-{time.time()}.log")
-UNBOUNDED_20M_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "db", "unbounded_20M.txt")
+UNBOUNDED_20M_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "aliquot", "unbounded_20M.txt")
 Path(os.path.dirname(YAFU_LOG_PATH)).mkdir(parents=True, exist_ok=True)
 
 
@@ -79,6 +79,72 @@ def aliquot_sum(n, threads=1, yafu_line_reader=None, report_function=None):
 
 def num_digits(n):
     return len(str(n))
+
+
+def get_elf_path(n):
+    return os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "elf", f"{int(n)}.elf")
+
+
+def parse_elf_line(line):
+    matches = re.split('[.=* ]+', line)
+    index = int(matches[0])
+    value = gmpy2.mpz(matches[1])
+    factor_strings = matches[2:]
+    known_factor_dict = dict(map(lambda splote: (int(splote[0]), 1 if len(splote) == 1 else int(splote[1])),
+                           map(lambda factor_string: factor_string.split("^"), factor_strings)))
+    return index, value, known_factor_dict
+
+
+
+def evaluate(n, i):
+    """api for expression library to calculate aliquot terms, returns None if not yet known by factordb"""
+    elf_path = get_elf_path(n)
+    if os.path.exists(get_elf_path(n)):
+        with open(elf_path, "r") as f:
+            for line in f.readlines():
+                index, value, known_factor_dict = parse_elf_line(line)
+                if i == index:
+                    return value
+    # either downloading for the first time or updating it with latest
+    factordb.download_elf_for_seq(n)
+    with open(elf_path, "r") as f:
+        for line in f.readlines():
+            index, value, known_factor_dict = parse_elf_line(line)
+            if i == index:
+                return value
+
+
+def get_last_c80_term(n):
+    """get last c80 term for the alimerge file, returns None if not found"""
+    ret_value = None
+    value = n
+    this_digits = num_digits(value)
+    elf_path = get_elf_path(n)
+    if os.path.exists(get_elf_path(n)):
+        with open(elf_path, "r") as f:
+            for line in f.readlines():
+                last_digits = this_digits
+                last_value = value
+                index, value, known_factor_dict = parse_elf_line(line)
+                this_digits = num_digits(value)
+                if this_digits == 81 and last_digits == 80:
+                    ret_value = last_value
+        if ret_value:
+            return ret_value
+    value = n
+    this_digits = num_digits(value)
+    # either downloading for the first time or updating it with latest
+    factordb.download_elf_for_seq(n)
+    with open(elf_path, "r") as f:
+        for line in f.readlines():
+            last_digits = this_digits
+            last_value = value
+            index, value, known_factor_dict = parse_elf_line(line)
+            this_digits = num_digits(value)
+            if this_digits == 81 and last_digits == 80:
+                ret_value = last_value
+    if ret_value:
+        return ret_value
 
 
 class YafuLineReader:
@@ -429,6 +495,14 @@ class AliquotDB:
         lines = [" ".join([str(innerinner) for innerinner in inner]) for inner in chunked]
         lines = ["Update " + line for line in lines]
         return "\n".join(lines)
+
+
+    def get_next_open_sequence(self, sequence):
+        cur = self.connection.cursor()
+        cur.execute("""
+        SELECT sequence FROM aliquot WHERE sequence > ? ORDER BY sequence ASC LIMIT 1;
+        """, (sequence,))
+        return cur.fetchone()[0]
 
 
 

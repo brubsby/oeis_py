@@ -1,10 +1,9 @@
 import concurrent.futures.thread
-import functools
 import logging
 import math
-import sys
 import time
 import json
+import os
 from lxml import html
 
 import gmpy2
@@ -14,7 +13,8 @@ from modules import config
 
 REPORT_ENDPOINT = "http://factordb.com/report.php"
 ENDPOINT = "http://factordb.com/api"
-SEQUENCE_ENDPOINT = f"https://factordb.com/sequences.php"
+SEQUENCE_ENDPOINT = "https://factordb.com/sequences.php"
+ELF_ENDPOINT = "https://factordb.com/elf.php"
 _session = None
 logger = logging.getLogger("factordb")
 
@@ -153,20 +153,15 @@ def report(composite_to_factors_dict, sleep=1):
         return report(composite_to_factors_dict, sleep=sleep*2)
 
 
-def get_latest_aliquot_term(composite, sleep=1):
+def get_latest_aliquot_term(n, sleep=1):
     payload = {
         "se": "1",
         "action": "last",
-        "aq": str(composite),
+        "aq": str(n),
     }
     try:
         response = _get_session().get(SEQUENCE_ENDPOINT, params=payload)
         response.raise_for_status()
-    except Exception as e:
-        logger.error(e)
-        time.sleep(sleep)
-        return get_latest_aliquot_term(composite, sleep=sleep * 2)
-    if response and response.ok:
         tree = html.fromstring(response.text)
         latest_composite_href = tree.xpath("/html/body/table[2]/tr[2]/td[4]/a[1]/@href")
         href = latest_composite_href[0] if latest_composite_href else None
@@ -177,7 +172,34 @@ def get_latest_aliquot_term(composite, sleep=1):
             fdb = FactorDB(id, is_id=True)
             fdb.connect()
             return fdb, index
-    raise "Couldn't get latest composite"
+        raise "Couldn't get latest composite"
+    except Exception as e:
+        logger.error(e)
+        time.sleep(sleep)
+        return get_latest_aliquot_term(n, sleep=sleep * 2)
+
+
+def download_elf_for_seq(n, sleep=1):
+    payload = {
+        "seq": n,
+        "type": 1,
+    }
+    try:
+        response = _get_session().get(ELF_ENDPOINT, params=payload)
+        response.raise_for_status()
+        elf_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "elf", f"{int(n)}.elf")
+        content = response.content
+        if not content.startswith(b"0"):
+            raise ConnectionError("wrong elf downloaded")
+        with open (elf_path,'wb') as f:
+            f.write(response.content)
+    except Exception as e:
+        logger.error(e)
+        time.sleep(sleep)
+        return download_elf_for_seq(n, sleep=sleep * 2)
+    if not os.path.exists(elf_path):
+        raise "couldn't find .elf file we supposedly just downloaded"
+    # TODO error if improper format?
 
 
 if __name__ == "__main__":
