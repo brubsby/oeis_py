@@ -639,7 +639,7 @@ if __name__ == "__main__":
             last_term = None
             term_fdb, index = factordb.get_latest_aliquot_term(composite)
             term = term_fdb.get_value()
-            if term_fdb.get_status() in ["P", "PRP", "Prp"]:
+            if term_fdb.get_status() in ["P", "PRP", "Prp"] or num_digits(term) < 45:
                 print("Sequence terminated!")
                 sys.exit()
             while True:
@@ -672,8 +672,8 @@ if __name__ == "__main__":
                     last_term = None
                     term_fdb, index = factordb.get_latest_aliquot_term(seq)
                     term = term_fdb.get_value()
-                    if term_fdb.get_status() in ["P", "PRP", "Prp"]:
-                        print(f"{seq} terminated at {term}!")
+                    if term_fdb.get_status() in ["P", "PRP", "Prp"] or num_digits(term) < 45:
+                        # probably terminates, move on to next one, and the query will update it as terminated.
                         break
                     if num_digits(term) > digit_limit:
                         break
