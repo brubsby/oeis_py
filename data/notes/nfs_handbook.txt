@@ -28,31 +28,31 @@ GPU Msieve polyselect
 https://www.mersenneforum.org/showthread.php?t=29630
 
 1. Add worktodo.ini in msieve_nfsathome directory, containing the input number
+cd ~/msieve_nfsathome
 nano worktodo.ini
 2. delete old files
 rm msieve.*
 3. run this for a bit, then interrupt
-./msieve -np1
+timeout 5 ./msieve -np1
 4. check msieve.log for "max stage 1 norm" and "max stage 2 norm"
+grep "max stage" msieve.log
 5. run
 ./msieve -np "stage1_norm={1/10 to 1/2 of max stage 1 norm} stage2_norm={3 orders of magnitude less than stage 1 norm} min_coeff={best e score found so far}"
 6. tune this around to make sure GPU has high usage
 7. run this in another window in the msieve_nfsathome dir to check highest score found:
-watch "grep '^#' msieve.dat.p | LANG=C sort -rgk7 | uniq | head -n1 | xargs -I {} grep -A9 -m1 {} msieve.dat.p"
+cd ~/msieve_nfsathome && watch "grep '^#' msieve.dat.p | LANG=C sort -rgk7 | uniq | head -n1 | xargs -I {} grep -A9 -m1 {} msieve.dat.p"
 8. compare with current best score for composite size here:
-https://www.mersenneforum.org/showthread.php?t=20933&page=21
+https://www.mersenneforum.org/node/15489?p=1065140#post1065140
 9. report high score if you got one
 10. once satisfied, go to cownoise and check that you can't improve the skew
 http://cownoise.com/ -> calculators -> optimal skew
 11. make a testPoly file with the result
-grep '^#' msieve.dat.p | LANG=C sort -rgk7 | uniq | head -n1 | xargs -I {} grep -A9 -m1 {} msieve.dat.p > ~/gnfs-lasieve-bb/testPoly
+cd ~/msieve_nfsathome && grep '^#' msieve.dat.p | LANG=C sort -rgk7 | uniq | head -n1 | xargs -I {} grep -A9 -m1 {} msieve.dat.p > ~/gnfs-lasieve-bb/testPoly
 cd ~/gnfs-lasieve-bb
 12. copy parameterization from previous jobs of the same size:
 https://www.mersenneforum.org/showthread.php?t=29140
 13. test sieve using this script
-qint=1000; seq 15 5 90 | parallel -k "rm -f testRels{} ; ./gnfs-lasieve4I14e -f {}000000 -c $qint -a -o testRels{} testPoly 2>&1" | awk -F'[()=, ]' 'NR==1{startq=int($6/1000000)*1000000; print "q0 yield estsum sec/rel avg_sec/rel\n"} NR>1 {nextq=int($6/1000000)*1000000; qdiff=nextq-q; total_rels+=qdiff*rels/'"$qint"'; total_sec_rel+=sec_rel*qdiff; avg_sec_rel=total_sec_rel/(nextq-startq); printf "%dM %d %.01fM %.05f %.05f\n", int(q/1000000), rels, total_rels/1000000, sec_rel, avg_sec_rel} {rels=$3; sec_rel=$8; q=int($6/1000000)*1000000;}' | column -t ; tput bel
-
-
+qint=100; seq 15 5 90 | parallel -k "rm -f testRels{} ; ./gnfs-lasieve4I15e -f {}000000 -c $qint -a -o testRels{} testPoly 2>&1" | awk -F'[()=, ]' 'NR==1{startq=int($6/1000000)*1000000; print "q0 yield estsum sec/rel avg_sec/rel\n"} NR>1 {nextq=int($6/1000000)*1000000; qdiff=nextq-q; total_rels+=qdiff*rels/'"$qint"'; total_sec_rel+=sec_rel*qdiff; avg_sec_rel=total_sec_rel/(nextq-startq); printf "%dM %d %.01fM %.05f %.05f\n", int(q/1000000), rels, total_rels/1000000, sec_rel, avg_sec_rel} {rels=$3; sec_rel=$8; q=int($6/1000000)*1000000;}' | column -t ; tput bel
 
 ## Msieve GPU LA:
 # NFS@Home:
@@ -70,10 +70,15 @@ cd ~/msieve_nfsathome
 
 ## CADO-NFS:
 1. start server with:
-composite_name="A309290.89"; equivalent_digits=160; N="64814539504505998825257471908145784457157706050754516171836033734771452825355981688499705900514772324461614421632202476413686315942230276693442554726619408312027"
+composite_name="A048985.288.2295"; equivalent_digits=170; N="3158079449531690837260621253299483852023444774824870895865193873842702633170888632227232703204829781085134904202686452659811180782707612895303054259766806674731232413981251"
 cd ~/cado-nfs/; python3 cado-nfs.py -t 12 -w "$HOME/cado-nfs/$composite_name" $N server.whitelist=0.0.0.0/0 server.port=9999 server.ssl=no slaves.hostnames=localhost slaves.scriptpath=$HOME/cado-nfs/build/$(hostname) --slaves 0
 2. start clients with, http if no ssl, https if ssl, C145+ should be 4-threaded, or I=14=4 threads, I=15=8 threads
 python3 cado-nfs-client.py -d --server=http://localhost:9999 --override t 4
+
+
+## CADO-NFS polyselect only:
+composite_name="A048985.288.2295"; equivalent_digits=170; N="3158079449531690837260621253299483852023444774824870895865193873842702633170888632227232703204829781085134904202686452659811180782707612895303054259766806674731232413981251"
+cd ~/cado-nfs/; python3 cado-nfs.py -t 12 -w "$HOME/cado-nfs/$composite_name" $N server.whitelist=0.0.0.0/0 server.port=9999 server.ssl=no slaves.hostnames=localhost slaves.scriptpath=$HOME/cado-nfs/build/$(hostname) tasks.sieve.run=false
 
 
 ## CADO-NFS SNFS:
