@@ -1,4 +1,3 @@
-import heapq
 import logging
 import os
 import re
@@ -13,7 +12,7 @@ from lxml import html
 import gmpy2
 import t_level
 
-from modules import expression, factor, prime, ecmtimes, yafu
+from modules import expression, factor, ecmtimes
 
 DB_NAME = "oeis_factor.db"
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "db", DB_NAME)
@@ -469,7 +468,7 @@ class OEISFactorDB:
         tuples = sorted(tuples, key=lambda x: x[0])
         for completion_time, composite_row in tuples:
             if self.validate_stored_composite_unfactored(composite_row['value']):
-                return composite_row, completion_time
+                return composite_row
             else:
                 return self.get_easiest_composite(digit_limit=digit_limit, pretest=pretest, delta_t=delta_t, threads=threads)
 
@@ -482,15 +481,15 @@ class OEISFactorDB:
         else:
             return self.get_smallest_t_level_composite(digit_limit=digit_limit)
 
-    def get_smallest_composite(self, digit_limit=500, pretest=0.3):
+    def get_smallest_composite(self, digit_limit=500, pretest_limit=0.3):
         cur = self.cursor()
-        cur.execute(f"SELECT id, value, t_level, expression, digits FROM composite WHERE digits < ? AND t_level < (digits * ?) ORDER BY digits ASC", (digit_limit, pretest))
+        cur.execute(f"SELECT id, value, t_level, expression, digits FROM composite WHERE digits < ? AND t_level < (digits * ?) ORDER BY digits ASC", (digit_limit, pretest_limit))
         result = cur.fetchall()
         for composite_row in result:
             if self.validate_stored_composite_unfactored(composite_row['value']):
                 return composite_row
             else:
-                return self.get_smallest_composite(digit_limit=digit_limit, pretest=pretest)
+                return self.get_smallest_composite(digit_limit=digit_limit, pretest_limit=pretest_limit)
 
     def get_all_pretested_composites(self, pretest=0.3):
         cur = self.cursor()

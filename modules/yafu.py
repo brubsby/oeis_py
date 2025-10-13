@@ -77,7 +77,7 @@ def factor(expr, stop_after_one=False, report_to_factordb=True, threads=1, work=
             if line_reader is not None:
                 line_reader.process_line(line)
             else:
-                logger.debug(line[:-1])
+                logger.debug(line)
         proc.wait()
         if line_reader is not None:
             line_reader.done()

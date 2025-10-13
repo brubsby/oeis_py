@@ -22,13 +22,13 @@ def _get_digits_module(digits):
 
 
 def get_ecm_time(digits, b1, curves, threads=1):
-    # if digits > 500:
-    # extrapolated surface
-    try:
-        stime = 2.293859206732816e-09 * pow(1.7777651508829972, math.log10(b1) * 5.49548701883304) + 1.953699357838586 * pow(1.0008677880252723, digits * math.log10(b1) * 2.195624509993748)
-        return stime * curves / threads
-    except OverflowError:
-        return float('inf')
+    if digits > 500:
+        # extrapolated surface
+        try:
+            stime = 2.293859206732816e-09 * pow(1.7777651508829972, math.log10(b1) * 5.49548701883304) + 1.953699357838586 * pow(1.0008677880252723, digits * math.log10(b1) * 2.195624509993748)
+            return stime * curves / threads
+        except OverflowError:
+            return float('inf')
     ecm_times = _get_digits_module(digits).ecm_times
     i = 0
     j = 0

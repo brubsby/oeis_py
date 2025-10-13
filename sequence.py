@@ -49,7 +49,7 @@ class Sequence:
             # sequence refers to it past 1 term mostly
             # go ahead and calc them all up to n-1 iteratively to avoid terrible python recursion
             if self._iterative_lookup:
-                biggest_lookup_n = sorted(self._lookup.keys())[-1] if len(self._lookup) > 0 else self.start_index
+                biggest_lookup_n = sorted(self._lookup.keys())[-1] if len(self._lookup) > 0 else self.start_index - 1
                 for m in range(biggest_lookup_n + 1, n):
                     self.calculate(m)
         calculated_value = self.calculate(n)

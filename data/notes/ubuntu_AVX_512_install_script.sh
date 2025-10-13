@@ -20,7 +20,7 @@ cd ~
 # ytools (yafu)
 git clone https://github.com/bbuhrow/ytools.git
 cd  ytools
-make COMPILER=gcc SKYLAKEX=1
+make
 cd ~
 
 # ysieve (yafu)

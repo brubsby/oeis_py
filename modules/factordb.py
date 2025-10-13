@@ -102,6 +102,16 @@ class FactorDB():
         ml = [[gmpy2.mpz(x)] * y for x, y in factors]
         return sorted([y for x in ml for y in x])
 
+    def get_factor_dict(self):
+        """
+        get_factors: [['2', 3], ['3', 2]]
+        Returns: [[mpz(2), 3], [mpz(3), 2]]
+        """
+        factors = self.get_factor_from_api()
+        if not factors:
+            return None
+        return dict((gmpy2.mpz(x), y) for x, y in factors)
+
 
 class ReportThreadPool:
     """
@@ -191,7 +201,7 @@ def download_elf_for_seq(n, sleep=1):
         content = response.content
         if not content.startswith(b"0"):
             raise ConnectionError("wrong elf downloaded")
-        with open (elf_path,'wb') as f:
+        with open(elf_path, 'wb') as f:
             f.write(response.content)
     except Exception as e:
         logger.error(e)

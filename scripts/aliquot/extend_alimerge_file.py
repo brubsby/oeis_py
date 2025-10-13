@@ -6,7 +6,7 @@ import requests
 from scripts import aliquot
 
 ALIMERGE_FILE_URL = "http://www.aliquotes.com/OE_5000000_C80.txt"
-ALIMERGE_FILE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "aliquot", "OE_5000000_C80.txt")
+ALIMERGE_FILE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "aliquot", "OE_5000000_C80.txt")
 
 if __name__ == "__main__":
     if not os.path.exists(ALIMERGE_FILE_PATH):

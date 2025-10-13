@@ -22,7 +22,7 @@ class A082132(Sequence):
 sys.modules[__name__] = A082132()
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
     seq = A082132()
     # print(seq.generate_data_section())
     seq.generate_b_file(term_cpu_time=30)

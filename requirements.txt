@@ -2,3 +2,4 @@ gmpy2
 requests
 aiohttp
 aiohttp_retry
+num2words

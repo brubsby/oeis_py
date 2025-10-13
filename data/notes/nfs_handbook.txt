@@ -54,10 +54,15 @@ https://www.mersenneforum.org/showthread.php?t=29140
 13. test sieve using this script
 qint=100; seq 15 5 90 | parallel -k "rm -f testRels{} ; ./gnfs-lasieve4I15e -f {}000000 -c $qint -a -o testRels{} testPoly 2>&1" | awk -F'[()=, ]' 'NR==1{startq=int($6/1000000)*1000000; print "q0 yield estsum sec/rel avg_sec/rel\n"} NR>1 {nextq=int($6/1000000)*1000000; qdiff=nextq-q; total_rels+=qdiff*rels/'"$qint"'; total_sec_rel+=sec_rel*qdiff; avg_sec_rel=total_sec_rel/(nextq-startq); printf "%dM %d %.01fM %.05f %.05f\n", int(q/1000000), rels, total_rels/1000000, sec_rel, avg_sec_rel} {rels=$3; sec_rel=$8; q=int($6/1000000)*1000000;}' | column -t ; tput bel
 
+
+## poly "spin":
+# https://www.mersenneforum.org/node/20111?t=26265
+
+
 ## Msieve GPU LA:
 # NFS@Home:
 1. prep NFS@Home variables with:
-nfs_user=<username>; nfs_password=<password>; compositename="OEIS_A060881_80";
+nfs_user=<username>; nfs_password=<password>; compositename="binomial_89_2__89m89_89";
 cd ~/msieve_nfsathome; mkdir $compositename; cd $compositename
 2. download files (picking up where we left off, if there's more), and run duplicate removal:
  printf "%s\n" .fb .ini .poly .projection .dat.gz | xargs -I {} aria2c --http-user=$nfs_user --http-passwd=$nfs_password --continue https://escatter11.fullerton.edu/nfs_data/$compositename/$compositename{}; zcat $compositename.dat.gz | remdups4 $(($(stat --printf="%s" $compositename.dat.gz)/12503137)) > $compositename.unique.dat;
@@ -70,7 +75,7 @@ cd ~/msieve_nfsathome
 
 ## CADO-NFS:
 1. start server with:
-composite_name="A048985.288.2295"; equivalent_digits=170; N="3158079449531690837260621253299483852023444774824870895865193873842702633170888632227232703204829781085134904202686452659811180782707612895303054259766806674731232413981251"
+composite_name="TEMP1"; equivalent_digits=125; N="5821838164878042950723260816279483165537454117528723492586126923819035735404001668904304682655844328119161305423604055620549"
 cd ~/cado-nfs/; python3 cado-nfs.py -t 12 -w "$HOME/cado-nfs/$composite_name" $N server.whitelist=0.0.0.0/0 server.port=9999 server.ssl=no slaves.hostnames=localhost slaves.scriptpath=$HOME/cado-nfs/build/$(hostname) --slaves 0
 2. start clients with, http if no ssl, https if ssl, C145+ should be 4-threaded, or I=14=4 threads, I=15=8 threads
 python3 cado-nfs-client.py -d --server=http://localhost:9999 --override t 4
@@ -140,7 +145,7 @@ sed -i '/^[[:space:]]*$/d' ~/msieve_nfsathome/msieve.fb
 # nano ~/msieve_nfsathome/msieve.fb
 echo $N > ~/msieve_nfsathome/worktodo.ini
 cd *.upload; for f in *.gz;do zcat $f | sed '/^#/ d' >> ~/msieve_nfsathome/msieve.dat;done;
-cd ~/msieve_nfsathome/; ./msieve -v -g 0 -t 16 -nc target_density=60
+cd ~/msieve_nfsathome/; ./msieve -v -g 0 -t 16 -nc target_density=120
 
 
 # Assorted tidbits:

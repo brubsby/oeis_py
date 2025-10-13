@@ -25,7 +25,7 @@ def query_sequence_from_name(name):
     response = requests.get(get_url_for_sequence_name_query(name))
     if not response.ok:
         raise f"oeis response status code was {response.status_code}"
-    return response.json()['results']
+    return response.json()
 
 
 if __name__ == '__main__':

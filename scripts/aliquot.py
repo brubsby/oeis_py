@@ -86,7 +86,7 @@ def get_elf_path(n):
 
 
 def parse_elf_line(line):
-    matches = re.split('[.=* ]+', line)
+    matches = re.split('[.=*\t ]+', line)
     index = int(matches[0])
     value = gmpy2.mpz(matches[1])
     factor_strings = matches[2:]
@@ -95,11 +95,22 @@ def parse_elf_line(line):
     return index, value, known_factor_dict
 
 
+def parse_elf_file(filename):
+    ret = {}
+    if os.path.exists(filename):
+        with open(filename, "r") as f:
+            for line in f.readlines():
+                if line and line.replace("\x00", ""):
+                    i, value, known_factor_dict = parse_elf_line(line)
+                    ret[i] = {"value": value, "known_factors": known_factor_dict}
+    return ret
+
+
 
 def evaluate(n, i):
     """api for expression library to calculate aliquot terms, returns None if not yet known by factordb"""
     elf_path = get_elf_path(n)
-    if os.path.exists(get_elf_path(n)):
+    if os.path.exists(elf_path):
         with open(elf_path, "r") as f:
             for line in f.readlines():
                 index, value, known_factor_dict = parse_elf_line(line)
@@ -120,7 +131,7 @@ def get_last_c80_term(n):
     value = n
     this_digits = num_digits(value)
     elf_path = get_elf_path(n)
-    if os.path.exists(get_elf_path(n)):
+    if os.path.exists(elf_path):
         with open(elf_path, "r") as f:
             for line in f.readlines():
                 last_digits = this_digits
@@ -416,10 +427,10 @@ class AliquotDB:
 
     def get_smallest(self, term=True, offset=None):
         cur = self.connection.cursor()
-        ordering_clauses = ['term_size ASC', 'composite_size ASC']
-        ordering_clauses = ordering_clauses if term else list(reversed(ordering_clauses))
-        # higher classes have lower stability
-        ordering_clauses.append('class DESC')
+        if term:
+            ordering_clauses = ['term_size ASC', 'sequence ASC']
+        else:
+            ordering_clauses = ['composite_size ASC', 'sequence ASC']
         ordering = ', '.join(ordering_clauses)
         cur.execute(f"SELECT * FROM aliquot WHERE reservation = '' ORDER BY {ordering} LIMIT 1 OFFSET {str(offset) if offset else '0'};")
         rows = cur.fetchall()

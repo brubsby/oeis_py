@@ -1,10 +1,10 @@
 import logging.handlers
 import os
 import sys
+import t_level
 
-from modules import yafu
+from modules import yafu, ecm, factordb
 from modules.oeis_factor_db import OEISFactorDB
-
 
 
 # pick up and do work on composites from the page
@@ -33,17 +33,22 @@ if __name__ == "__main__":
 
     ecm_only = True
     num_threads = 12
-    composite_size_limit = 10000
+    composite_size_limit = 500
+    pretest_limit = 0.3
     delta_t_levels_per_job = 1
     if ecm_only:
         while True:
-            composite_row, completion_time = db.get_easiest_composite(digit_limit=composite_size_limit, delta_t=delta_t_levels_per_job, threads=num_threads)
-            root_logger.info(f"selected C{composite_row['digits']} belonging to {composite_row['expression']}, with existing work t{composite_row['t_level']:.02f}, should complete in {completion_time/3600:.02f} hours")
+            composite_row = db.get_smallest_composite(digit_limit=composite_size_limit, pretest_limit=pretest_limit)
+            target_t_level = ((int(composite_row['t_level']) // delta_t_levels_per_job) + 1) * delta_t_levels_per_job
+            completion_time = db.get_ecm_time(int(composite_row['digits']), int(composite_row['t_level']), target_t_level, threads=num_threads)
+            root_logger.info(f"selected C{composite_row['digits']} belonging to {composite_row['expression']}, from t{composite_row['t_level']:.02f} to t{target_t_level:.02f}, should complete in {completion_time/3600:.02f} hours")
             composite = composite_row['value']
             work = float(composite_row['t_level'])
-            pretest_level = ((work // delta_t_levels_per_job) + 1) * delta_t_levels_per_job  # next multiple of 2 t-level, perhaps reduce to 1 as t-level gets higher
-            factors = yafu.factor(composite, threads=num_threads, work=composite_row['t_level'], pretest=pretest_level)
-            if len(factors) > 1:
+            pretest_level = ((work // delta_t_levels_per_job) + 1) * delta_t_levels_per_job
+            curves, b1, _, _, _ = t_level.get_suggestion_curves_from_t_levels(work or 0, pretest_level)
+            factors = ecm.ecm(composite, b1, curves, num_threads, start_t=work)
+            factordb.report({composite: factors})
+            if len(factors):
                 root_logger.info("Found factors!")
             db.update_work(composite, pretest_level)
     else:

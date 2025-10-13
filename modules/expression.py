@@ -210,7 +210,9 @@ def _evaluate_stack(s, state=None):
     if op == "Phi":
         # note: args are pushed onto the stack in reverse order
         args = list(reversed([_evaluate_stack(s, state) for _ in range(num_args)]))
-        return gmpy2.mpz(sympy.polys.specialpolys.cyclotomic_poly(sub, *args))
+        if sub is not None:
+            args.insert(0, sub)
+        return gmpy2.mpz(sympy.polys.specialpolys.cyclotomic_poly(*args))
     elif op in ["prod", "concat"]:
         end_range_incl = popped[3]
         start_range_incl = popped[2]

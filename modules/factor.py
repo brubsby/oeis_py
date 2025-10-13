@@ -172,6 +172,15 @@ def smallest_prime_factor(n, divisors=__trialdivisors, check_factor_db=True, dig
         return factorize(n, check_factor_db=check_factor_db and not checked_factordb, threads=threads)[0]
 
 
+# not strictly the smallest, but usually
+def unordered_prime_factor_generator(n, check_factor_db=True):
+    if type(n) != gmpy2.mpz:
+        n = gmpy2.mpz(n)
+    if n < 2:
+        yield n
+        return
+
+
 def smallest_prime_factor_generator(n, divisors=__trialdivisors, check_factor_db=True, digit_limit=10):
     if type(n) != gmpy2.mpz:
         n = gmpy2.mpz(n)
@@ -311,6 +320,30 @@ def factordb_prime_signature(n, num_retries=10, sleep_time=2):
             return recurse_val
     logging.debug(f"Unable to find prime signature for {n}")
     return -1
+
+
+# returns a tuple containing a dict of known prime factors, and a dict of composite factors
+def factordb_get_known_factorization(n):
+    logging.debug(f"Checking factordb for remaining composite factors of: {n}")
+    f = FactorDB(n)
+    f.connect()
+    status = f.get_status()
+    factors = f.get_factor_dict()
+    if status is None:  # probably number too big
+        return {}, factors
+    if status in ["P", "PRP", "Prp", "Unit", "FF"]:
+        return factors, {}  # no cofactor left
+    if status in ["C", "U"]:
+        return {}, factors  # only cofactor known
+    if status in ["CF"]:
+        primes, composites = {}, {}
+        for p, i in factors.items():
+            if prime.is_prime(p, check_factor_db=True):
+                primes[p] = i
+            else:
+                composites[p] = i
+        return primes, composites
+    assert False, f"Unknown factordb status: {status} for {n}"
 
 
 def factordb_get_remaining_composites(n):
