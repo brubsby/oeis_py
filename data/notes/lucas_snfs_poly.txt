@@ -2,6 +2,8 @@
 
 \\ https://www.mersenneforum.org/showthread.php?t=23895
 
+default(realprecision, 1000);
+
 assert(predicate,err)=if(!cond,error(err));
 
 \\ Credit to Charles Greathouse for the dickmanrho, rhoest, and deBruijnXi implementation
@@ -207,7 +209,30 @@ sympoly(d) = {
 }
 
 plindep(N,d,x,y,comment) = {
-    result = lindep(subst(subst(concat(N, sympoly(d)), 'x, x), 'y, y));
+    vectors = subst(subst(concat(N, sympoly(d)), 'x, x), 'y, y);
+    
+    result = lindep(vectors);
+    
+    if (result[1] == 0,
+       \\ Trivial relation found (coeff of N is 0). Try to find next best using qflll.
+       K_scale = 10^100;
+       W = matid(#vectors);
+       W[1,1] = 0; \\ Allow large coeff for N
+       M_rel = matconcat([K_scale * Mat(vectors); W]);
+       U = qflll(M_rel);
+       Basis = M_rel * U;
+       
+       found = 0;
+       for(j=1, #vectors,
+           if (Basis[1, j] == 0 && Basis[2, j] != 0,
+               result = Basis[2..#vectors+1, j];
+               found = 1;
+               break;
+           );
+       );
+       if (!found, result = Basis[2..#vectors+1, 1]); \\ Fallback
+    );
+
     polygcd = content(result[2..#result]);
     apol = Polrev(result[2..#result]\polygcd);
     rpol = (-y+x*'x)\content([x,y]);
@@ -344,19 +369,23 @@ polygen(isu, p,q,k,composite=0, printpolys=0) = {
                                    paramsvec = concat(paramsvec, [N, d, 1, V(p,q,k\o), strprintf("%d divisibility case", o)]))));
 
     if(1, \\ prime or composite with no small factors case
-            N = seqf(p,q,k);
-            \\ find small factors:
-            factors = factor(N,10^5); \\ TODO might need adjusting
-            div = 1;
-            for(i = 1, #factors[,1]-1, div=div * factors[i,1]^factors[i,2]);
-            N = seqf(p,q,k)\div;
+            if(composite > 0,
+                N = composite,
+                N = seqf(p,q,k);
+                \\ find small factors:
+                factors = factor(N,10^5); \\ TODO might need adjusting
+                div = 1;
+                for(i = 1, #factors[,1]-1, div=div * factors[i,1]^factors[i,2]);
+                N = seqf(p,q,k)\div;
+            );
             foreach([4,5,6,7,8], d,
                 foreach([U,V], base_func,
                     my(m=k\d);
                     foreach([m, m+1], i,
                         foreach([
 			         [base_func(p,q,i), base_func(p,q,i-1)], \\ for some reason U works better always \\ TODO confirm this
-                                 [base_func(p,q,i), base_func(p,q,i-2)]
+                                 [base_func(p,q,i), base_func(p,q,i-2)],
+                                 [base_func(p,q,i), base_func(p,q,i+2)]
                                 ], yvec,
                                 paramsvec = concat(paramsvec, [N, d, yvec[1], yvec[2], "default case"]))))));
     paramsvec = Vecrev(paramsvec);
@@ -368,8 +397,10 @@ polygen(isu, p,q,k,composite=0, printpolys=0) = {
                             y0 = params[4];
                             comment = params[5];
                             poly = plindep(N, d, y1, y0, comment);
-                            if(composite, poly[4] = composite);
-                            result_polys = concat(result_polys, jiggle(poly)));
+                            if (vecsum(abs(Vec(poly[1]))) < 10^15,
+                                if(composite, poly[4] = composite);
+                                result_polys = concat(result_polys, jiggle(poly))
+                            ););
     for(i=1, #result_polys, result_polys[i] = concat(concat(result_polys[i], snfs_difficulty(result_polys[i])), polyscore(result_polys[i])));
     result_polys = vecsort(result_polys, polysortcmp, 8);
     if(printpolys, apply(printpoly, Vecrev(result_polys)));
@@ -380,7 +411,7 @@ polygen(isu, p,q,k,composite=0, printpolys=0) = {
 polygenu(p, q, k, composite=0, printpolys=0) = polygen(1, p, q, k, composite, printpolys);
 polygenv(p, q, k, composite=0, printpolys=0) = polygen(0, p, q, k, composite, printpolys);
 
-polyfind(isu, p, q, k, composite=0, numpolys=10) = {
+polyfind(isu, p, q, k, composite=0, numpolys=50) = {
     result_polys = polygen(isu, p, q, k, composite);
     final_polys = Vecrev(result_polys[1..numpolys]);
     apply(printpoly, final_polys);
@@ -407,8 +438,8 @@ snfsbetterv(p, q, k, composite) = snfsbetter(0, p, q, k, composite);
 
 polysortcmp(x, y) = {
     coef_diff = vecsum(abs(Vec(x[1]))) - vecsum(abs(Vec(y[1])));
-    \\ if coeff diff is > 10^4, sort by that (get rid of the fails)
-    if(abs(coef_diff) > 10^4, coef_diff);
+    \\ if coeff diff is > 10^20, sort by that (get rid of the fails)
+    if(abs(coef_diff) > 10^20, coef_diff);
     xdegree = poldegree(x[1]);
     ydegree = poldegree(y[1]);
     xsnfs = x[5];
@@ -493,4 +524,3 @@ zone_distance(value, low_bound, high_bound) = {
 \\result = plindep(N,d,x,y)
 \\printpoly(N, result)
 \\jiggle(N, result)
-
