@@ -63,8 +63,7 @@ dickmanrho(x)={
     \\ Return a result based on the scale factor and the asymptotic formula.
     return(precision(rhoest(x) * scale, 9));
 };
-addhelp(dickmanrho, "Estimates the value of the Dickman rho function. For x <= 3 the exact values are used, up to rounding; up to "#rhoTable" the value is interpolated using known values and rhoest; after "#rhoTable" rhoest is used, along with a correction factor based on the last value in rhoTable.");
-
+addhelp(dickmanrho, "Estimates the value of the Dickman rho function. For x <= 3 the exact values are used, up to rounding; up to \"#rhoTable\" the value is interpolated using known values and rhoest; after \"#rhoTable\" rhoest is used, along with a correction factor based on the last value in rhoTable.");
 
 \\ The following 4 functions were adapted from CADO-NFS Murphy E score calculation
 
@@ -215,7 +214,7 @@ plindep(N,d,x,y,comment) = {
     return([apol, rpol, comment, N]);
 }
 
-snfs_difficulty(pols) ={
+snfs_difficulty(pols) = {
     my(x=-polcoef(pols[2],0)/polcoef(pols[2],1),
        val=polcoef(pols[2],1)^poldegree(pols[1])*eval(pols[1]));
     if(val==0, return(99999999999));
@@ -349,12 +348,15 @@ polygen(isu, p,q,k,composite=0, printpolys=0) = {
             \\ find small factors:
             factors = factor(N,10^5); \\ TODO might need adjusting
             div = 1;
-            for(i = 1, #factors[,1]-1, div=div * vecprod(factors[i,]));
+            for(i = 1, #factors[,1]-1, div=div * factors[i,1]^factors[i,2]);
             N = seqf(p,q,k)\div;
-            foreach([4,6,8], d,
+            foreach([4,5,6,7,8], d,
                 foreach([U,V], base_func,
-                    foreach([[base_func(p,q,k\d+1), base_func(p,q,k\d)], \\ for some reason U works better always \\ TODO confirm this
-                            [base_func(p,q,k\d+1), base_func(p,q,k\d-1)]], yvec,
+                    my(m=k\d);
+                        foreach([
+			         [base_func(p,q,m+1), base_func(p,q,m)], \\ for some reason U works better always \\ TODO confirm this
+                                 [base_func(p,q,m+1), base_func(p,q,m-1)]
+                                ], yvec,
                                 paramsvec = concat(paramsvec, [N, d, yvec[1], yvec[2], "default case"])))));
     paramsvec = Vecrev(paramsvec);
     result_polys = List();
@@ -364,7 +366,9 @@ polygen(isu, p,q,k,composite=0, printpolys=0) = {
                             y1 = params[3];
                             y0 = params[4];
                             comment = params[5];
-                            result_polys = concat(result_polys, jiggle(plindep(N, d, y1, y0, comment))));
+                            poly = plindep(N, d, y1, y0, comment);
+                            if(composite, poly[4] = composite);
+                            result_polys = concat(result_polys, jiggle(poly)));
     for(i=1, #result_polys, result_polys[i] = concat(concat(result_polys[i], snfs_difficulty(result_polys[i])), polyscore(result_polys[i])));
     result_polys = vecsort(result_polys, polysortcmp, 8);
     if(printpolys, apply(printpoly, Vecrev(result_polys)));
