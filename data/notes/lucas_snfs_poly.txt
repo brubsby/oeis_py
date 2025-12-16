@@ -353,11 +353,12 @@ polygen(isu, p,q,k,composite=0, printpolys=0) = {
             foreach([4,5,6,7,8], d,
                 foreach([U,V], base_func,
                     my(m=k\d);
+                    foreach([m, m+1], i,
                         foreach([
-			         [base_func(p,q,m+1), base_func(p,q,m)], \\ for some reason U works better always \\ TODO confirm this
-                                 [base_func(p,q,m+1), base_func(p,q,m-1)]
+			         [base_func(p,q,i), base_func(p,q,i-1)], \\ for some reason U works better always \\ TODO confirm this
+                                 [base_func(p,q,i), base_func(p,q,i-2)]
                                 ], yvec,
-                                paramsvec = concat(paramsvec, [N, d, yvec[1], yvec[2], "default case"])))));
+                                paramsvec = concat(paramsvec, [N, d, yvec[1], yvec[2], "default case"]))))));
     paramsvec = Vecrev(paramsvec);
     result_polys = List();
     for (i = 1, #paramsvec, params = paramsvec[i];
