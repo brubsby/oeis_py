@@ -221,7 +221,7 @@ plindep(N,d,x,y,comment) = {
        M_rel = matconcat([K_scale * Mat(vectors); W]);
        U = qflll(M_rel);
        Basis = M_rel * U;
-       
+     
        found = 0;
        for(j=1, #vectors,
            if (Basis[1, j] == 0 && Basis[2, j] != 0,
@@ -381,11 +381,11 @@ polygen(isu, p,q,k,composite=0, printpolys=0) = {
             foreach([4,5,6,7,8], d,
                 foreach([U,V], base_func,
                     my(m=k\d);
-                    foreach([m, m+1], i,
+                    foreach([m-2, m-1, m, m+1, m+2], i,
                         foreach([
 			         [base_func(p,q,i), base_func(p,q,i-1)], \\ for some reason U works better always \\ TODO confirm this
-                                 [base_func(p,q,i), base_func(p,q,i-2)],
-                                 [base_func(p,q,i), base_func(p,q,i+2)]
+                                 [base_func(p,q,i+1), base_func(p,q,i-1)],
+                                 [1, base_func(p,q,i)]
                                 ], yvec,
                                 paramsvec = concat(paramsvec, [N, d, yvec[1], yvec[2], "default case"]))))));
     paramsvec = Vecrev(paramsvec);
@@ -460,14 +460,14 @@ polysortcmp(x, y) = {
 
 \\ distance in decimal digits away from the "optimal degree zone" for SNFS only, i.e.
 \\4: <100
-\\5: 100-200
+\\5: 100-210
 \\6: 200-260?
 \\7: 260?
 \\8: 260?
 degree_distance(deg, difficulty) = {
     return(
-        if( deg == 4, zone_distance(difficulty, 0, 100),
-            deg == 5, zone_distance(difficulty, 100, 200),
+        if( deg == 4, zone_distance(difficulty, 0, 110),
+            deg == 5, zone_distance(difficulty, 100, 210),
             deg == 6, zone_distance(difficulty, 200, 260),
             zone_distance(difficulty, 260, 1000)));
 }
