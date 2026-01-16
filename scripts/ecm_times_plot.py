@@ -8,7 +8,7 @@ from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
-from modules import ecmtimes
+from oeispy.utils import ecmtimes
 import matplotlib.ticker as mticker
 
 

@@ -4,7 +4,7 @@ import logging
 import random
 
 import gmpy2
-from modules import prime
+from oeispy.utils import prime
 
 
 _prime_cache = {}

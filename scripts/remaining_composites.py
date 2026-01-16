@@ -4,7 +4,7 @@ import sys
 
 import gmpy2
 
-from modules import batch_factordb
+from oeispy.utils import batch_factordb
 
 __version__ = "0.0.1"
 

@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oeispy"
+version = "0.1.0"
+description = "A Python project for OEIS sequences"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "gmpy2",
+    "requests",
+    "aiohttp",
+    "aiohttp_retry",
+    "num2words",
+    "primesieve",
+    "func_timeout",
+    "lxml"
+]
+
+[project.scripts]
+# Define CLI entry points here if needed in the future

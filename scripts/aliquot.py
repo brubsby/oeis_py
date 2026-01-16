@@ -16,7 +16,7 @@ import requests
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from modules import yafu, factor, factordb
+from oeispy.utils import yafu, factor, factordb
 
 DB_NAME = "aliquot.db"
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "db", DB_NAME)

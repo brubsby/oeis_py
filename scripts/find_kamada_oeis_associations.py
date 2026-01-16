@@ -1,5 +1,5 @@
-from modules.kamada_prime_difficulty import read_prime_difficulty_txt
-from modules.oeis_query import query_sequences_from_subsequence
+from oeispy.utils.kamada_prime_difficulty import read_prime_difficulty_txt
+from oeispy.utils.oeis_query import query_sequences_from_subsequence
 
 
 # for each entry in kamada's prime_difficulty.txt, search a subsequence of the found primes for oeis existence

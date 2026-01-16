@@ -4,8 +4,8 @@ import itertools
 import re
 
 import requests
-from sequences import A003056
-from sequences import A000217
+from oeispy.sequences import A003056
+from oeispy.sequences import A000217
 
 
 def query_oeis(seq_id):

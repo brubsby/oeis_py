@@ -1,7 +1,7 @@
 # script to update composite work amounts to help with quitting long ecm jobs
 
 import argparse
-from modules import oeis_factor_db, factor, expression
+from oeispy.utils import oeis_factor_db, factor, expression
 
 # Initialize the ArgumentParser object
 parser = argparse.ArgumentParser(description="My Script")

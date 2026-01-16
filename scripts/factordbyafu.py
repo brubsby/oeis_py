@@ -11,11 +11,11 @@ import requests
 import random
 import urllib
 from func_timeout import func_timeout, FunctionTimedOut
-from modules import config
+from oeispy.utils import config
 
 import gmpy2
 
-from modules import factor
+from oeispy.utils import factor
 
 __COOKIE__ = config.get_factordb_cookie()
 

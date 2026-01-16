@@ -6,8 +6,8 @@ import time
 
 import gmpy2
 
-from modules import expression, factor
-from modules.oeis_factor_db import OEISFactorDB
+from oeispy.utils import expression, factor
+from oeispy.utils.oeis_factor_db import OEISFactorDB
 
 work_regex = re.compile(r"(((\d+)@(\d+(?:(?:e|\*10\^)\d+)?)(,\s)?)+|t\d+)")
 

@@ -9,10 +9,10 @@ import traceback
 
 import gmpy2
 
-from modules import factor
-from modules import factordb
-from modules import prime
-from modules import batch_factordb
+from oeispy.utils import factor
+from oeispy.utils import factordb
+from oeispy.utils import prime
+from oeispy.utils import batch_factordb
 
 __version__ = "0.0.1"
 

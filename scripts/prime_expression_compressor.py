@@ -5,7 +5,7 @@ from functools import cache
 
 import gmpy2
 
-from modules import expression
+from oeispy.utils import expression
 
 
 @cache

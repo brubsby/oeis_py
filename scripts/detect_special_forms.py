@@ -6,7 +6,7 @@ import timeit
 import gmpy2
 import random
 
-from modules import oeis_factor_db, factor
+from oeispy.utils import oeis_factor_db, factor
 
 sqrt_5 = gmpy2.sqrt(5)
 golden_ratio = (1 + sqrt_5)/2

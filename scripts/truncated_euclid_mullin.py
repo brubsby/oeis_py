@@ -1,4 +1,4 @@
-from modules import factor
+from oeispy.utils import factor
 import math
 import itertools
 import logging
