@@ -6,7 +6,7 @@ from sympy import divisor_sigma, totient
 
 from oeispy.utils import factor, base, prime, semiprime
 from oeispy.core import Sequence
-from sequences import A062402
+from oeispy.sequences import A062402
 
 
 class A096996(Sequence):

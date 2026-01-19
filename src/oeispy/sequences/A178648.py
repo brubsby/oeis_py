@@ -5,7 +5,7 @@ import sys
 from oeispy.utils import factor, base, prime, semiprime
 from oeispy.core import Sequence
 
-from sequences import A096177, A096547
+from oeispy.sequences import A096177, A096547
 
 
 class A178648(Sequence):

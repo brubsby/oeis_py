@@ -32,7 +32,7 @@ __pfgw_factordb_digit_limit = 7500
 __in_house_trialdiv_digit_limit = 100
 # gmpy2.is_prime is pretty fast up
 __pfgw_path = "C:/Software/pfgw_win_4.0.4/pfgw64.exe"\
-    if os.name == 'nt' else os.path.join(os.path.expanduser("~"), "pfgw", "pfgw64")
+    if os.name == 'nt' else "pfgw"
 
 
 # public api, 0 composite, 1 probable prime, 2 definite prime
@@ -189,6 +189,17 @@ def previous_prime(val):
     if val == 3:
         return gmpy2.mpz(2)
     return gmpy2.prev_prime(val)
+
+
+def primorial(n):
+    if n < 2:
+        return gmpy2.mpz(1)
+    res = gmpy2.mpz(1)
+    p = gmpy2.mpz(2)
+    while p <= n:
+        res *= p
+        p = gmpy2.next_prime(p)
+    return res
 
 
 if __name__ == "__main__":

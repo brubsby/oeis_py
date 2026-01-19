@@ -7,7 +7,7 @@ import gmpy2
 from oeispy.utils import factor, base, prime, semiprime
 from oeispy.core import Sequence
 
-from sequences import T000001
+from oeispy.sequences import T000001
 
 
 class A130140(Sequence):

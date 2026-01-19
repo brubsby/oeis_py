@@ -5,7 +5,7 @@ import logging
 import gmpy2
 
 from oeispy.core import Sequence
-from sequences import A178914
+from oeispy.sequences import A178914
 
 
 class A110396(Sequence):

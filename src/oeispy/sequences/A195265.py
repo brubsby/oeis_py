@@ -4,7 +4,7 @@ import logging
 
 from oeispy.core import Sequence
 
-from sequences import A080670
+from oeispy.sequences import A080670
 
 
 class A195265(Sequence):

@@ -24,5 +24,13 @@ def get_yafu_bin():
     return config.get("Paths", "yafu_bin")
 
 
+def get_yafu_ini():
+    config = configparser.ConfigParser()
+    config.read(CONFIG_PATH)
+    if config.has_option("Paths", "yafu_ini"):
+        return config.get("Paths", "yafu_ini")
+    return os.path.join(get_yafu_dir(), "yafu.ini")
+
+
 if __name__ == "__main__":
     print(get_factordb_cookie())

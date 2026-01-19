@@ -1,8 +1,8 @@
 import logging
 import sys
 
-from sequences import A000422
-from sequences import A007908
+from oeispy.sequences import A000422
+from oeispy.sequences import A007908
 from oeispy.core import Sequence
 
 

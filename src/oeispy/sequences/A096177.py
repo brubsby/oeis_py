@@ -6,7 +6,7 @@ import primesieve
 
 from oeispy.utils import factor, base, prime, semiprime, primorial
 from oeispy.core import Sequence
-from sequences import A002110
+from oeispy.sequences import A002110
 
 
 class A096177(Sequence):

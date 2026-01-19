@@ -9,7 +9,7 @@ from lxml import html
 import gmpy2
 import requests
 
-from oeispy.utils import config
+from oeispy.utils import config, factordb_cache
 
 REPORT_ENDPOINT = "http://factordb.com/report.php"
 ENDPOINT = "http://factordb.com/api"
@@ -17,6 +17,18 @@ SEQUENCE_ENDPOINT = "https://factordb.com/sequences.php"
 ELF_ENDPOINT = "https://factordb.com/elf.php"
 _session = None
 logger = logging.getLogger("factordb")
+
+
+class CachedResponse:
+    def __init__(self, status, factors):
+        self._json = {
+            "status": status,
+            "factors": factors,
+            "id": None  # ID might be missing from cache, handle gracefully if needed
+        }
+
+    def json(self):
+        return self._json
 
 
 def _get_session():
@@ -44,9 +56,23 @@ class FactorDB():
     def connect(self, reconnect=False, sleep=1):
         if self.result and not reconnect:
             return self.result
+
+        # Try cache first if we are looking up by value
+        if self.n and not reconnect:
+            status, factors = factordb_cache.get_local_factors(self.n)
+            if status in ["FF", "P", "PRP", "Unit"]:
+                self.result = CachedResponse(status, factors)
+                return self.result
+
         try:
             self.result = _get_session().get(ENDPOINT, params={"query": str(self.n)} if self.n else {"id": str(self.id)})
-            self.result.json()
+            data = self.result.json()
+            
+            # Cache the result if we have a value and data is valid
+            if self.n and data.get("status"):
+                # Transform factors from API format [['2', 1]] to cache format [['2', 1]] (same)
+                factordb_cache.save_local_factors(self.n, data.get("status"), data.get("factors"))
+                
         except (requests.exceptions.ConnectionError, requests.exceptions.JSONDecodeError, json.decoder.JSONDecodeError) as e:
             logger.error(e)
             time.sleep(sleep)

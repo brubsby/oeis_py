@@ -2,7 +2,7 @@ import sys
 
 import gmpy2
 
-from sequences import A045918
+from oeispy.sequences import A045918
 from oeispy.core import Sequence
 
 

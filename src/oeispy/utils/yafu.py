@@ -51,10 +51,17 @@ def factor(expr, stop_after_one=False, report_to_factordb=True, threads=1, work=
         os.makedirs(dirpath, exist_ok=True)
         # copy the yafu.ini, so that we can use it from the throwaway temp dir without polluting the yafu directory with
         # logs and restart points
-        shutil.copy(os.path.join(__yafu_dir, "yafu.ini"), os.path.join(dirpath, "yafu.ini"))
+        src_ini = config.get_yafu_ini()
+        if os.path.exists(src_ini):
+            shutil.copy(src_ini, os.path.join(dirpath, "yafu.ini"))
         factors_filename = "factors.out"
+        
+        bin_path = os.path.join(__yafu_dir, __yafu_bin)
+        if not os.path.exists(bin_path):
+            bin_path = __yafu_bin
+
         popen_arglist = [
-            os.path.join(__yafu_dir, __yafu_bin), "-of", factors_filename, "-v"
+            bin_path, "-of", factors_filename, "-v"
         ]
         if stop_after_one:
             popen_arglist.append("-one")

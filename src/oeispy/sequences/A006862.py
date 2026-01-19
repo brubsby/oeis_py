@@ -6,7 +6,7 @@ import primesieve
 
 from oeispy.utils import factor, base, prime, semiprime
 from oeispy.core import Sequence
-from sequences import A002110
+from oeispy.sequences import A002110
 
 
 # Euclid Number
