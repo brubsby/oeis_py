@@ -59,13 +59,14 @@ class FactorDB():
 
         # Try cache first if we are looking up by value
         if self.n and not reconnect:
-            status, factors = factordb_cache.get_local_factors(self.n)
+            status, factors, _ = factordb_cache.get_local_factors(self.n)
             if status in ["FF", "P", "PRP", "Unit"]:
                 self.result = CachedResponse(status, factors)
                 return self.result
 
         try:
-            self.result = _get_session().get(ENDPOINT, params={"query": str(self.n)} if self.n else {"id": str(self.id)})
+            params = {"query": str(self.n)} if self.n else {"id": str(self.id)}
+            self.result = _get_session().get(ENDPOINT, params=params)
             data = self.result.json()
             
             # Cache the result if we have a value and data is valid

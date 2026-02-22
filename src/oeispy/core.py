@@ -4,6 +4,7 @@ import os
 import re
 import sys
 import time
+import requests
 
 from func_timeout import func_timeout, FunctionTimedOut
 import oeispy.utils.checkpoint as checkpoint
@@ -160,10 +161,31 @@ class Sequence:
                 return retval
             retval = candidate_retval
 
+    def fetch_b_file(self):
+        a_number = self.__class__.__name__
+        b_filename = self.get_b_filename()
+        b_number = a_number.replace("A", "b")
+        url = f"https://oeis.org/{a_number}/{b_number}.txt"
+        logging.info(f"Fetching b-file for {a_number} from {url}")
+        try:
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200:
+                os.makedirs(os.path.dirname(b_filename), exist_ok=True)
+                with open(b_filename, "w") as f:
+                    f.write(response.text)
+                return True
+            else:
+                logging.warning(f"Failed to fetch b-file: {response.status_code}")
+        except Exception as e:
+            logging.error(f"Error fetching b-file: {e}")
+        return False
+
     def cache_b_file_values(self):
         if not os.path.exists(self.get_b_filename()):
-            logging.warning(f"{self.get_b_filename()} not found, even though b_file caching was requested for {self.__class__.__name__}, continuing...")
-            return
+            logging.warning(f"{self.get_b_filename()} not found, attempting to fetch...")
+            if not self.fetch_b_file():
+                 logging.warning("Could not fetch b-file, continuing without cache...")
+                 return
         with open(self.get_b_filename(), "r") as bfile:
             for line in bfile.readlines():
                 if line.startswith("#"):
@@ -171,7 +193,7 @@ class Sequence:
                 line = line.split("#")[0].strip()
                 if line:
                     parts = re.split("\s+", line)
-                    assert len(parts) == 2, "Too many terms in a single b file line"
+                    assert len(parts) >= 2, f"Too few terms in a single b file line: {line}"
                     n = int(parts[0])
                     value = int(parts[1])
                     self.cache_value(n, value)

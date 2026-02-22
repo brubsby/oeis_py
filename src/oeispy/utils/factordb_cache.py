@@ -31,11 +31,13 @@ def get_db_path():
 def get_connection():
     db_path = get_db_path()
     conn = sqlite3.connect(db_path)
+    # Ensure table exists
     conn.execute("""
         CREATE TABLE IF NOT EXISTS factors (
             n TEXT PRIMARY KEY,
             factors_json TEXT,
-            status TEXT
+            status TEXT,
+            updated_at REAL
         )
     """)
     conn.commit()
@@ -43,23 +45,23 @@ def get_connection():
 
 def get_local_factors(n):
     """
-    Returns (status, factors_list) if found, else (None, None).
+    Returns (status, factors_list, updated_at) if found, else (None, None, None).
     factors_list is [[p, e], ...]
     """
     n_str = str(n)
     with get_connection() as conn:
-        cursor = conn.execute("SELECT status, factors_json FROM factors WHERE n = ?", (n_str,))
+        cursor = conn.execute("SELECT status, factors_json, updated_at FROM factors WHERE n = ?", (n_str,))
         row = cursor.fetchone()
         if row:
-            status, factors_json = row
+            status, factors_json, updated_at = row
             try:
                 factors = json.loads(factors_json)
                 logging.debug(f"Cache HIT for {n_str[:20]}...: status={status}")
-                return status, factors
+                return status, factors, updated_at
             except json.JSONDecodeError:
                 pass
     logging.debug(f"Cache MISS for {n_str[:20]}...")
-    return None, None
+    return None, None, None
 
 def save_local_factors(n, status, factors):
     """
@@ -67,10 +69,11 @@ def save_local_factors(n, status, factors):
     """
     n_str = str(n)
     factors_json = json.dumps(factors)
+    updated_at = time.time()
     with get_connection() as conn:
         conn.execute(
-            "INSERT OR REPLACE INTO factors (n, factors_json, status) VALUES (?, ?, ?)",
-            (n_str, factors_json, status)
+            "INSERT OR REPLACE INTO factors (n, factors_json, status, updated_at) VALUES (?, ?, ?, ?)",
+            (n_str, factors_json, status, updated_at)
         )
         conn.commit()
 
@@ -112,13 +115,22 @@ def fetch_from_factordb(n):
 def get_factors_from_cache_or_db(n):
     """
     Checks local cache, then factordb for factors of n.
+    Refreshes if older than a week (604800 seconds).
     Returns (status, factors) or (None, None).
     """
     # 1. Check local cache
-    status, factors = get_local_factors(n)
+    status, factors, updated_at = get_local_factors(n)
     
-    # 2. If not found or stale (status "C" or "CF"), fetch from factordb
-    if not status or status in ["C", "CF"]:
+    # Check if stale
+    is_stale = False
+    if updated_at:
+        age = time.time() - updated_at
+        if age > 604800: # 7 days
+            is_stale = True
+            logging.info(f"Cache entry for {str(n)[:20]}... is stale ({age:.0f}s old), refreshing...")
+
+    # 2. If not found, or (stale and status is inconclusive ("C", "CF", "U")), fetch from factordb
+    if not status or (is_stale and status in ["C", "CF", "U"]):
         new_status, new_factors = fetch_from_factordb(n)
         if new_status:
             status, factors = new_status, new_factors
@@ -201,4 +213,3 @@ if __name__ == "__main__":
     test_p = 147573952589676412927
     print(f"Factoring {test_p}...")
     print(sympy.factorint(test_p))
-

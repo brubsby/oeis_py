@@ -530,13 +530,22 @@ class OEISFactorDB:
 
 
 if __name__ == "__main__":
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
+    import argparse
+    parser = argparse.ArgumentParser(description="OEIS Factor DB Utility")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose (DEBUG) logging")
+    args = parser.parse_args()
 
-    logger.setLevel(logging.DEBUG)
+    root_logger = logging.getLogger()
+    
+    if args.verbose:
+        root_logger.setLevel(logging.DEBUG)
+        logger.setLevel(logging.DEBUG)
+    else:
+        root_logger.setLevel(logging.INFO)
+        logger.setLevel(logging.INFO)
 
     handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(logging.DEBUG)
+    handler.setLevel(logging.DEBUG if args.verbose else logging.INFO)
     handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
     root_logger.addHandler(handler)
 

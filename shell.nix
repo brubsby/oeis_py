@@ -26,6 +26,9 @@ pkgs.mkShell {
     export C_INCLUDE_PATH="${pkgs.gmp.dev}/include:${pkgs.mpfr.dev}/include:${pkgs.libmpc}/include:$C_INCLUDE_PATH"
     export LIBRARY_PATH="${pkgs.gmp}/lib:${pkgs.mpfr}/lib:${pkgs.libmpc}/lib:$LIBRARY_PATH"
 
+    # Runtime library path (fixes ImportError: libprimesieve.so.12 ...)
+    export LD_LIBRARY_PATH="${pkgs.primesieve.lib}/lib:${pkgs.gmp}/lib:${pkgs.mpfr}/lib:${pkgs.libmpc}/lib:$LD_LIBRARY_PATH"
+
     echo "Welcome to the oeispy development shell!"
     echo "Libraries (primesieve, gmp, etc.) are configured for build."
   '';

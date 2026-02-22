@@ -8,6 +8,7 @@ import uuid
 import gmpy2
 
 from oeispy.utils.factordb import FactorDB
+from oeispy.utils import factordb_cache
 
 
 def prime_range(start, end):
@@ -111,6 +112,17 @@ def check_factordb_prime(expr, retries=3, sleep_time=5):
 
 
 def prp_test_pfgw(expr):
+    # Check local cache first
+    status, factors, _ = factordb_cache.get_local_factors(expr)
+    if status:
+        if status == "P":
+            return 2
+        elif status == "PRP":
+            return 1
+        elif status in ["C", "CF", "FF"]:
+            return 0
+        # If status is unknown or other, proceed to test
+
     start_time = time.time()
     str_expression = str(expr)
     this_uuid = uuid.uuid4()
@@ -160,11 +172,15 @@ def prp_test_pfgw(expr):
     finally:
         # cleanup temp dir
         shutil.rmtree(dirpath, ignore_errors=True)
+    
     if pfgw_returned_prime:
+        factordb_cache.save_local_factors(expr, "P", [[str(expr), 1]])
         return 2
     if pfgw_returned_prp:
+        factordb_cache.save_local_factors(expr, "PRP", [[str(expr), 1]])
         return 1
     if pfgw_returned_composite:
+        factordb_cache.save_local_factors(expr, "C", [])
         return 0
     raise Exception("PFGW gave no result")
 
