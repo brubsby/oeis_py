@@ -12,7 +12,7 @@ def _get_digits_module(digits):
     rounded_digits_string = f"{rounded_digits}0"
     module_name = f"ecmtimes_{rounded_digits_string}"
     if module_name not in sys.modules:
-        spec = importlib.util.spec_from_file_location(module_name, os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "ecm_times", module_name + ".py"))
+        spec = importlib.util.spec_from_file_location(module_name, os.path.join(os.path.dirname(__file__), "..", "..", "..", "data", "ecm_times", module_name + ".py"))
         module = importlib.util.module_from_spec(spec)
         sys.modules[module_name] = module
         spec.loader.exec_module(module)
@@ -64,7 +64,7 @@ def get_ecm_mem(digits, b1):
 
 if __name__ == "__main__":
     for i in range(100, 500, 10):
-        this_filepath = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "ecmtimes", f"ecmtimes_{i}.py")
+        this_filepath = os.path.join(os.path.dirname(__file__), "..", "..", "..", "data", "ecmtimes", f"ecmtimes_{i}.py")
         if not os.path.exists(this_filepath):
             request = requests.get(f"http://www.wraithx.net/math/ecmprobs/ecmtimes_{i}.js")
             with open(this_filepath, "w") as module_file:

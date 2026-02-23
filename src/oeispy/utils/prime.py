@@ -126,7 +126,7 @@ def prp_test_pfgw(expr):
     start_time = time.time()
     str_expression = str(expr)
     this_uuid = uuid.uuid4()
-    dirpath = os.path.join("..", "data", "temp", str(this_uuid))
+    dirpath = os.path.join(os.path.dirname(__file__), "..", "..", "..", "data", "temp", str(this_uuid))
     filename = f"temp-{this_uuid}.dat"
     temp_filepath = os.path.join(dirpath, filename)
     try:

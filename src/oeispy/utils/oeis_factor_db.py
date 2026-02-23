@@ -15,7 +15,7 @@ import t_level
 from oeispy.utils import expression, factor, ecmtimes
 
 DB_NAME = "oeis_factor.db"
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "db", DB_NAME)
+DB_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "..", "data", "db", DB_NAME)
 
 logger = logging.getLogger("oeis_factor_db")
 

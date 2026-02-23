@@ -19,9 +19,9 @@ from pathlib import Path
 from oeispy.utils import yafu, factor, factordb
 
 DB_NAME = "aliquot.db"
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "db", DB_NAME)
-YAFU_LOG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "logs", f"aliquot-yafu-{time.time()}.log")
-UNBOUNDED_20M_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "aliquot", "unbounded_20M.txt")
+DB_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "data", "db", DB_NAME)
+YAFU_LOG_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "data", "logs", f"aliquot-yafu-{time.time()}.log")
+UNBOUNDED_20M_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "data", "aliquot", "unbounded_20M.txt")
 Path(os.path.dirname(YAFU_LOG_PATH)).mkdir(parents=True, exist_ok=True)
 
 
@@ -82,7 +82,7 @@ def num_digits(n):
 
 
 def get_elf_path(n):
-    return os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "elf", f"{int(n)}.elf")
+    return os.path.join(os.path.dirname(__file__), "..", "..", "data", "elf", f"{int(n)}.elf")
 
 
 def parse_elf_line(line):

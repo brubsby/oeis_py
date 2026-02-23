@@ -1,0 +1,5 @@
+# A125042 (b-file synthesized from sequence entry)
+1 17
+2 47441
+3 33000748370307713
+4 21377

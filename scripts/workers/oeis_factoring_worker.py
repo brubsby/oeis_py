@@ -19,7 +19,7 @@ if __name__ == "__main__":
     stream_handler = logging.StreamHandler(sys.stdout)
     stream_handler.setLevel(logging.DEBUG)
     stream_handler.setFormatter(formatter)
-    logFilePath = os.path.join("..", "data", "logs", "yafu.log")
+    logFilePath = os.path.join(os.path.dirname(__file__), "..", "..", "data", "logs", "yafu.log")
     file_handler = logging.handlers.TimedRotatingFileHandler(
         filename=logFilePath, when='midnight', backupCount=30)
     file_handler.setFormatter(formatter)
