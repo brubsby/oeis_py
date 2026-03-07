@@ -314,7 +314,7 @@ def factordb_prime_signature(n, num_retries=10, sleep_time=2):
         if sleep_time > 0:
             logging.info(
                 f"Sleeping for {sleep_time} seconds after inconclusive status ({status}) on FactorDB for value: {n}")
-        time.sleep(sleep_time)
+            time.sleep(sleep_time)
         recurse_val = factordb_prime_signature(n, num_retries - 1, sleep_time=sleep_time * 2)
         if recurse_val != -1:
             return recurse_val
@@ -507,9 +507,6 @@ def euclid_mullin_product(start, index):
         return math.prod(sequence(k) for k in range(1, index+1))
     partial_product = euclid_mullin_product(start, index-1)
     return partial_product * smallest_prime_factor(partial_product + 1, digit_limit=None)
-
-
-        # old_value = value
 
 
 def generate_factors_by_size(n, divisors=__trialdivisors, check_factor_db=True, digit_limit=10):

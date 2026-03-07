@@ -172,7 +172,7 @@ class ReportThreadPool:
         if len(self.future_pool) >= self.max_workers:
             concurrent.futures.wait((self.future_pool[0],))
             del self.future_pool[0]
-        future = self.executor.submit(self._report, self, composite_to_factors_dict, sleep)
+        future = self.executor.submit(self._report, composite_to_factors_dict, sleep)
         self.future_pool.append(future)
 
 
@@ -209,7 +209,7 @@ def get_latest_aliquot_term(n, sleep=1):
             fdb = FactorDB(id, is_id=True)
             fdb.connect()
             return fdb, index
-        raise "Couldn't get latest composite"
+        raise RuntimeError("Couldn't get latest composite")
     except Exception as e:
         logger.error(e)
         time.sleep(sleep)
@@ -235,7 +235,7 @@ def download_elf_for_seq(n, sleep=1):
         time.sleep(sleep)
         return download_elf_for_seq(n, sleep=sleep * 2)
     if not os.path.exists(elf_path):
-        raise "couldn't find .elf file we supposedly just downloaded"
+        raise RuntimeError("couldn't find .elf file we supposedly just downloaded")
     # TODO error if improper format?
 
 

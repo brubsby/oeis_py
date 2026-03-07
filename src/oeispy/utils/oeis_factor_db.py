@@ -132,11 +132,11 @@ class OEISFactorDB:
         CREATE TABLE IF NOT EXISTS reservation(
             composite_id INTEGER REFERENCES composite(id) ON DELETE CASCADE,
             client_id INTEGER REFERENCES client(id) ON DELETE CASCADE,
-            type INTEGER REFERENCES client(type) ON DELETE CASCADE,
+            client_type INTEGER REFERENCES client(type) ON DELETE CASCADE,
             t_level_on_completion REAL,
             timestamp INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP,
             expiry_timestamp INTEGER NOT NULL DEFAULT (CURRENT_TIMESTAMP + (86400000 * 5)),
-            PRIMARY KEY (composite_id, client_id, type)
+            PRIMARY KEY (composite_id, client_id, client_type)
         );
         """)
 
@@ -203,7 +203,7 @@ class OEISFactorDB:
         cur = self.cursor()
         cur.execute(
             "INSERT INTO reservation "
-            "(composite_id, client_id, type, t_level_on_completion) "
+            "(composite_id, client_id, client_type, t_level_on_completion) "
             "VALUES ((SELECT id FROM composite WHERE value = ?), "
             "(SELECT id FROM client WHERE name = ?), "
             "(SELECT type FROM client WHERE name = ?), "
