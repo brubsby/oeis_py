@@ -4,7 +4,7 @@ import sys
 import gmpy2
 import requests
 
-from modules import factordb
+from oeispy.utils import factordb
 
 from scripts import aliquot
 

@@ -170,4 +170,4 @@ scratch.py
 /data/elf/
 /data/aliquot/
 is_prime_benchmarking.py
-/sequences/T*.py
+src/oeispy/sequences/T*.py
