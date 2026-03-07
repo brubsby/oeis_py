@@ -4,7 +4,7 @@ import sys
 import t_level
 
 from oeispy.utils import yafu, ecm, factordb
-from oeispy.utils.oeis_factor_db import OEISFactorDB
+from oeisfactor.db import OEISFactorDB
 
 
 # pick up and do work on composites from the page

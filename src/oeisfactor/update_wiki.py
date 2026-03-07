@@ -7,7 +7,8 @@ import time
 import gmpy2
 
 from oeispy.utils import expression, factor
-from oeispy.utils.oeis_factor_db import OEISFactorDB
+from oeisfactor.db import OEISFactorDB
+from oeisfactor import wiki_parser
 
 work_regex = re.compile(r"(((\d+)@(\d+(?:(?:e|\*10\^)\d+)?)(,\s)?)+|t\d+)")
 
@@ -25,7 +26,7 @@ if __name__ == "__main__":
     handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
     logger.addHandler(handler)
     db = OEISFactorDB()
-    parsed_data = db.parse_wiki_page()
+    parsed_data = wiki_parser.parse_wiki_page()
     updated_lines = []
     for row in parsed_data:
         line = row["line"]

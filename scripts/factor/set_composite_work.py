@@ -1,7 +1,8 @@
 # script to update composite work amounts to help with quitting long ecm jobs
 
 import argparse
-from oeispy.utils import oeis_factor_db, factor, expression
+from oeisfactor.db import OEISFactorDB
+from oeispy.utils import factor, expression
 
 # Initialize the ArgumentParser object
 parser = argparse.ArgumentParser(description="My Script")
@@ -19,7 +20,7 @@ if not expr:
 composite = expression.evaluate(expr)
 print(f"Composite Expression: {expr}")
 print(f"Composite Value:      {composite}")
-db = oeis_factor_db.OEISFactorDB()
+db = OEISFactorDB()
 remaining_composites = db.get_remaining_composites(composite)
 print(f"Remaining Composites:  {remaining_composites}")
 print(f"Current Work:         {db.get_work(remaining_composites[0])}")

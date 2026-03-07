@@ -15,22 +15,9 @@ import t_level
 from oeispy.utils import expression, factor, ecmtimes
 
 DB_NAME = "oeis_factor.db"
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "..", "data", "db", DB_NAME)
+DB_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "data", "db", DB_NAME)
 
 logger = logging.getLogger("oeis_factor_db")
-
-
-def sci_int(x):
-    if x is None or type(x) in [int, gmpy2.mpz]:
-        return x
-    if type(x) != str:
-        raise TypeError(f"sci_int needs a string input, instead of {type(x)} {x}")
-    if x.isnumeric():
-        return int(x)
-    match = re.match(r"^(\d+)(?:e|[x*]10\^)(\d+)$", x)
-    if not match:
-        raise ValueError(f"malformed intger string {x}, could not parse into an integer")
-    return gmpy2.mpz(match.group(1)) * pow(10, gmpy2.mpz(match.group(2)))
 
 
 class OEISFactorDB:
@@ -199,6 +186,36 @@ class OEISFactorDB:
             else:
                 return self.request_stage1_GPU_work(client_name, digit_limit=digit_limit, curves=curves)
 
+    def request_stage2_CPU_work(self, client_name, limit=100):
+        cur = self.cursor()
+        
+        # We get the stage 1 resume line, composite info, and the sigma to identify it
+        cur.execute("""
+            SELECT s1.sigma, s1.stage_1_resume_line, s1.b1, s1.ecm_param, 
+                   c.value, c.t_level, c.id as composite_id
+            FROM stage_1_curve s1
+            JOIN composite c ON s1.composite_id = c.id
+            LEFT JOIN stage_2_curve s2 ON s1.sigma = s2.sigma AND s1.composite_id = s2.composite_id
+            WHERE s2.sigma IS NULL
+            ORDER BY c.digits ASC, s1.timestamp ASC
+            LIMIT ?;
+        """, (limit,))
+        
+        results = cur.fetchall()
+        
+        work_batch = []
+        for row in results:
+            if self.validate_stored_composite_unfactored(row['value']):
+                work_batch.append({
+                    "sigma": row["sigma"],
+                    "resume_line": row["stage_1_resume_line"],
+                    "b1": row["b1"],
+                    "composite": str(row["value"])
+                })
+                # TODO: add reservation so other CPUs don't grab these same curves
+        
+        return work_batch
+
     def make_reservation(self, composite, client_name, t_level_on_completion):
         cur = self.cursor()
         cur.execute(
@@ -276,6 +293,8 @@ class OEISFactorDB:
         self.connection.commit()
 
     def add_composite(self, value, digits=None, expression=None, work=None, sequence_ids=None, k=None, first_sequence_more=None, factor_requirement=None):
+        if sequence_ids is None:
+            sequence_ids = []
         if value is not None and type(value) != gmpy2.mpz:
             value = gmpy2.mpz(value)
         if value is not None:
@@ -319,79 +338,6 @@ class OEISFactorDB:
         cursor.execute("SELECT * FROM composite;")
         result = cursor.fetchall()
         return result
-
-    def parse_wiki_page(self):
-        page_request = requests.get("https://oeis.org/wiki/OEIS_sequences_needing_factors?stable=0")
-        page_content = page_request.content
-        parsed = html.fromstring(page_content)
-        text = parsed.text_content()
-        info_lines = list(filter(lambda line: re.search(r"^A[0-9]{6}", line), text.split("\n")))
-        work_regex = re.compile(r"(\d+)@(\d+(?:(?:e|\*10\^)\d+)?)")
-        t_level_regex = re.compile(r"\Wt(\d{1,2})")
-        sequence_id_regex = re.compile(r"A\d{6}(?![(^_])")
-        composite_digits_regex = re.compile(r"\WC(\d+)")
-        expression_regex = re.compile(r"C(?:\d+|big)\s{1,15}(\*?)(.*?)(?:t\d+|\d+@|\s{2,}|$)")
-        factor_requirement_regex = re.compile(r"\[(specific small factors|smallest factor|semiprimality|\d-almost primality)\]")
-        parsed_data = []
-        for line in info_lines:
-            line_t_level = max(
-                t_level.get_t_level([(int(sci_int(curves)), int(sci_int(b1)), None, None) for curves, b1 in re.findall(work_regex, line)]),
-                float((lambda x: x.group(1) if x else 0.0)(re.search(t_level_regex, line))))
-            associated_sequences = re.findall(sequence_id_regex, line)
-            num_digits = (lambda x: int(x.group(1)) if x else None)(re.search(composite_digits_regex, line))
-            factor_requirement = (lambda x: str(x.group(1)) if x else None)(re.search(factor_requirement_regex, line))
-
-            search = re.search(expression_regex, line)
-            expr = more = None
-            if search:
-                more = search.group(1) == "*"
-                expr = search.group(2)
-                expr = expr.split(" or ")[0]
-                expr = expr.replace("[F^R(1801) is semiprime]", "")
-                expr = expr.strip()
-            parsed_line = {
-                "line": line,
-                "expression": expr,
-                "composite_digits": num_digits,
-                "work": line_t_level,
-                "more": more,
-                "sequences": associated_sequences,
-                "factor_requirement": factor_requirement,
-            }
-            parsed_data.append(parsed_line)
-        return parsed_data
-
-    def process_parsed_wiki_page(self, parsed_data):
-        for row in parsed_data:
-            line = row["line"]
-            num_digits = row["composite_digits"]
-            expr = row["expression"]
-            sequences = row["sequences"]
-            t_level = row["work"]
-            more = row["more"]
-            factor_requirement = row["factor_requirement"]
-            value = None
-            if "Cbig" in line or (num_digits and num_digits > 10000):  # don't mess with the enormous ones
-                continue
-            try:
-                # TODO speed up calculations here, very slow sometimes
-                start = time.time()
-                value = expression.evaluate(expr)
-                logger.debug(f"{expr} took {time.time()-start:.02f} seconds to calculate")
-            except Exception as e:
-                logger.error(f"Failed to evaluate expression: {expr}")
-                logger.error(e)
-            if value:
-                remaining_composites = factor.factordb_get_remaining_composites(value)
-                for composite in remaining_composites:
-                    calculated_digits = gmpy2.num_digits(composite) if composite else None
-                    if num_digits and composite and abs(calculated_digits - num_digits) > 1:
-                        logger.error(f"calculated ({calculated_digits}) and reported ({num_digits}) digit length disparity for:\n{line}")
-                    self.add_composite(composite, digits=num_digits, expression=expr, sequence_ids=sequences, work=t_level, first_sequence_more=more, factor_requirement=factor_requirement)
-            else:
-                logger.error(f"No composite value for \n{line}")
-                for sequence in sequences:
-                    self.add_sequence(sequence, more=more)
 
     def delete_composite(self, composite):
         assert composite is not None
@@ -550,6 +496,6 @@ if __name__ == "__main__":
     root_logger.addHandler(handler)
 
     db = OEISFactorDB()
-    db.process_parsed_wiki_page(db.parse_wiki_page())
+
     # print(db.get_easiest_composite())
     [print(row["id"]) for row in db.get_sequences_with_no_composites()]

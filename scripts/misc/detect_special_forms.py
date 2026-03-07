@@ -6,7 +6,8 @@ import timeit
 import gmpy2
 import random
 
-from oeispy.utils import oeis_factor_db, factor
+from oeisfactor.db import OEISFactorDB
+from oeispy.utils import factor
 
 sqrt_5 = gmpy2.sqrt(5)
 golden_ratio = (1 + sqrt_5)/2
@@ -124,7 +125,7 @@ def test_random_fib_or_lucas_product():
 
 
 def test_db_composites_for_lucas_addition_special_forms():
-    db = oeis_factor_db.OEISFactorDB()
+    db = OEISFactorDB()
     composites = db.get_all_composites()
     for composite in composites:
         value = composite['value']
