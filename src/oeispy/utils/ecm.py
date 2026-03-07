@@ -14,7 +14,7 @@ import t_level
 
 import gmpy2
 
-from modules import config
+from oeispy.utils import config
 
 
 def positive_integer(arg):
@@ -120,7 +120,7 @@ class _EcmWorker:
         self.lastCurveOutputPrefix = ''
         self.outputLastCurveIndic = -1
         self.gmpEcmOutputHasTimestamp = False
-        self.stepDurationPattern = re.compile('Step (?:1|2) took (\d+)ms')
+        self.stepDurationPattern = re.compile(r'Step (?:1|2) took (\d+)ms')
 
 
     def work(self):

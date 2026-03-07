@@ -32,5 +32,13 @@ def get_yafu_ini():
     return os.path.join(get_yafu_dir(), "yafu.ini")
 
 
+def get_ecm_path():
+    config = configparser.ConfigParser()
+    config.read(CONFIG_PATH)
+    if config.has_option("Paths", "ecm"):
+        return config.get("Paths", "ecm")
+    return None
+
+
 if __name__ == "__main__":
     print(get_factordb_cookie())
