@@ -184,8 +184,62 @@ class OEISFactorDB:
         # TODO free reservation
         self.connection.commit()
 
+    def _update_composite_t_level(self, cursor, composite_id):
+        """Add newly completed curves to the composite's t_level.
+
+        The current t_level already encodes all previously counted work (both ours
+        and external). We convert it to an equivalent curve tuple as the baseline,
+        then stack only the uncounted new curves on top. After updating, we mark
+        those curves counted so they are never added again.
+        """
+        cursor.execute("SELECT t_level FROM composite WHERE id = ?", (composite_id,))
+        row = cursor.fetchone()
+        current_t = (row['t_level'] or 0) if row else 0
+
+        # Only grab curves not yet counted — avoids double-counting with current_t
+        cursor.execute("""
+            SELECT s1.b1, s2.b2_end, s1.ecm_param, COUNT(*) as n_curves
+            FROM stage_1_curve s1
+            JOIN stage_2_curve s2 ON s1.sigma = s2.sigma AND s1.composite_id = s2.composite_id
+            WHERE s1.composite_id = ? AND s2.counted_in_t_level = 0
+            GROUP BY s1.b1, s2.b2_end, s1.ecm_param
+        """, (composite_id,))
+
+        new_curve_groups = cursor.fetchall()
+        if not new_curve_groups:
+            return
+
+        curve_tuples = []
+        # Treat current t_level as the baseline (external + previously counted work)
+        if current_t > 0:
+            baseline_curves, baseline_b1 = t_level.get_t_level_curves(current_t)
+            curve_tuples.append((baseline_curves, baseline_b1, None, 1))
+        for row in new_curve_groups:
+            curve_tuples.append((row['n_curves'], row['b1'], row['b2_end'], row['ecm_param'] or 1))
+
+        new_t = t_level.get_t_level(curve_tuples)
+
+        cursor.execute(
+            "UPDATE composite SET t_level = MAX(?, IFNULL(t_level, 0)) WHERE id = ?",
+            (new_t, composite_id)
+        )
+        # Mark the newly counted stage_1 curves (those whose stage_2 we just counted)
+        cursor.execute("""
+            UPDATE stage_1_curve SET counted_in_t_level = 1
+            WHERE composite_id = ? AND counted_in_t_level = 0
+              AND sigma IN (
+                  SELECT sigma FROM stage_2_curve
+                  WHERE composite_id = ? AND counted_in_t_level = 0
+              )
+        """, (composite_id, composite_id))
+        # Mark the newly counted stage_2 curves
+        cursor.execute("""
+            UPDATE stage_2_curve SET counted_in_t_level = 1
+            WHERE composite_id = ? AND counted_in_t_level = 0
+        """, (composite_id,))
+
     def submit_stage_2_curves_batch(self, completions, client_name):
-        """Insert multiple stage 2 completions in a single transaction."""
+        """Insert multiple stage 2 completions in a single transaction and update t-levels."""
         cursor = self.connection.cursor()
         cursor.execute("SELECT id FROM client WHERE name = ?", (client_name,))
         client_res = cursor.fetchone()
@@ -210,6 +264,19 @@ class OEISFactorDB:
             "VALUES ((SELECT id FROM composite WHERE value = ?), ?, ?, ?, ?, ?);",
             insert_data,
         )
+
+        # Recalculate t-level for each distinct composite in this batch (usually just one)
+        seen = set()
+        for c in completions:
+            composite_key = pickle.dumps(gmpy2.mpz(c["composite"]))
+            if composite_key in seen:
+                continue
+            seen.add(composite_key)
+            cursor.execute("SELECT id FROM composite WHERE value = ?", (composite_key,))
+            row = cursor.fetchone()
+            if row:
+                self._update_composite_t_level(cursor, row[0])
+
         self.connection.commit()
 
     def submit_stage_2_curves(self, composite, sigma, client_name, b2_start, b2_end, duration):
