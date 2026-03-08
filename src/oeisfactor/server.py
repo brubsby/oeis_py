@@ -1,4 +1,5 @@
 import logging
+import gmpy2
 from flask import Flask, request, jsonify
 from oeisfactor.db import OEISFactorDB
 
@@ -47,7 +48,7 @@ def get_gpu_work():
 def submit_gpu_work():
     data = request.json
     client_name = data.get("client_name")
-    composite = int(data.get("composite"))
+    composite = gmpy2.mpz(data.get("composite"))
     residue_lines = data.get("residue_lines")
     duration = data.get("duration")
     
@@ -79,7 +80,7 @@ def get_cpu_work():
 def submit_cpu_work():
     data = request.json
     client_name = data.get("client_name")
-    composite = int(data.get("composite"))
+    composite = gmpy2.mpz(data.get("composite"))
     sigma = data.get("sigma")
     b2_start = data.get("b2_start")
     b2_end = data.get("b2_end")

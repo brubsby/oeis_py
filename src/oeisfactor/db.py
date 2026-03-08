@@ -131,7 +131,8 @@ class OEISFactorDB:
         cursor = self.connection.cursor()
         cursor.execute(
             "INSERT INTO client(name, type) "
-            "VALUES (?, ?);",
+            "VALUES (?, ?) "
+            "ON CONFLICT(name) DO UPDATE SET type=excluded.type;",
             (name, type)
         )
         self.connection.commit()
@@ -197,21 +198,45 @@ class OEISFactorDB:
         self.connection.commit()
 
     def request_stage1_GPU_work(self, client_name, digit_limit=300, curves=8192):
-        cur = self.cursor()
-        cur.execute(
-            f"SELECT id, value, t_level, expression, digits "
-            f"FROM composite WHERE digits < ? ORDER BY t_level ASC, digits ASC",
-            (digit_limit,))
-        result = cur.fetchall()
-        tuples = list(map(lambda row: (
-        ), result))
-        tuples = sorted(tuples, key=lambda x: x[0])
-        for completion_time, composite_row in tuples:
-            if self.validate_stored_composite_unfactored(composite_row['value']):
-                # TODO make reservation
-                return composite_row['value'], self.get_optimal_gpu_b1(curves, int(composite_row['t_level'])), completion_time
-            else:
-                return self.request_stage1_GPU_work(client_name, digit_limit=digit_limit, curves=curves)
+        best_composite = None
+        best_score = float('inf')
+        best_b1 = None
+        
+        # Check the top theoretical easiest composites
+        for i, row in enumerate(self.iter_unfactored_composites(digit_limit, skip_with_outstanding_residues=True)):
+            if i >= 50: 
+                break
+                
+            t_level_val = float(row['t_level'] or 0)
+            digits = int(row['digits'])
+            
+            b1 = self.get_optimal_gpu_b1(curves, t_level_val)
+            
+            # Estimate how much this B1 will increase the t_level
+            existing_curves, existing_b1 = t_level.get_t_level_curves(t_level_val)
+            new_t_level = t_level.get_t_level([
+                (existing_curves, existing_b1, None, 1),
+                (curves, b1, b1, 3)
+            ])
+            delta_t = new_t_level - t_level_val
+            
+            if delta_t <= 0:
+                continue
+                
+            # Time cost proxy: B1 * digits^2
+            # We want to minimize (cost / delta_t)
+            score = (b1 * (digits ** 2)) / delta_t
+            
+            if score < best_score:
+                best_score = score
+                best_composite = row['value']
+                best_b1 = b1
+                
+        if best_composite:
+            # TODO: self.make_reservation(best_composite, client_name, ...)
+            return best_composite, best_b1, 0
+            
+        return None
 
     def request_stage2_CPU_work(self, client_name, limit=100):
         cur = self.cursor()
@@ -437,13 +462,45 @@ class OEISFactorDB:
         cur = self.cursor()
         cur.execute(f"SELECT id, value, t_level, expression, digits FROM composite WHERE digits < ? AND t_level < (digits * ?) ORDER BY t_level ASC, digits ASC", (digit_limit, pretest))
         result = cur.fetchall()
-        tuples = list(map(lambda row: (self.get_ecm_time(int(row['digits']), int(row['t_level']), ((int(row['t_level']) // delta_t) + 1) * delta_t, threads=threads), row), result))
+        tuples = list(map(lambda row: (self.get_ecm_time(int(row['digits']), int(row['t_level'] or 0), ((int(row['t_level'] or 0) // delta_t) + 1) * delta_t, threads=threads), row), result))
         tuples = sorted(tuples, key=lambda x: x[0])
         for completion_time, composite_row in tuples:
             if self.validate_stored_composite_unfactored(composite_row['value']):
                 return composite_row
             else:
                 return self.get_easiest_composite(digit_limit=digit_limit, pretest=pretest, delta_t=delta_t, threads=threads)
+
+    def iter_unfactored_composites(self, digit_limit=500, pretest=0.3, skip_with_outstanding_residues=False):
+        """Yields valid, unfactored composites from easiest to hardest (by t_level)."""
+        cur = self.cursor()
+        
+        if skip_with_outstanding_residues:
+            # We filter out any composite that has a row in stage_1_curve without a matching row in stage_2_curve
+            query = """
+                SELECT c.id, c.value, c.t_level, c.expression, c.digits 
+                FROM composite c
+                WHERE c.digits < ? AND c.t_level < (c.digits * ?)
+                  AND c.id NOT IN (
+                      SELECT s1.composite_id 
+                      FROM stage_1_curve s1
+                      LEFT JOIN stage_2_curve s2 ON s1.sigma = s2.sigma AND s1.composite_id = s2.composite_id
+                      WHERE s2.sigma IS NULL
+                  )
+                ORDER BY c.t_level ASC, c.digits ASC
+            """
+        else:
+            query = """
+                SELECT id, value, t_level, expression, digits 
+                FROM composite 
+                WHERE digits < ? AND t_level < (digits * ?) 
+                ORDER BY t_level ASC, digits ASC
+            """
+            
+        cur.execute(query, (digit_limit, pretest))
+        
+        for row in cur.fetchall():
+            if self.validate_stored_composite_unfactored(row['value']):
+                yield row
 
     def get_smallest_t_level_composite(self, digit_limit=500, factor_requirement=None):
         cur = self.cursor()
