@@ -135,6 +135,7 @@ async def main():
     parser.add_argument("--server", type=str, default="http://localhost:5000", help="URL of the OEISFactor server")
     parser.add_argument("--name", type=str, required=True, help="Unique name for this worker")
     parser.add_argument("-t", "--threads", type=int, default=os.cpu_count() or 1, help="Number of CPU threads to use")
+    parser.add_argument("--hours", type=float, default=1.0, help="Target hours of work to fetch per batch")
     parser.add_argument("-v", "--verbose", action="count", default=0, help="verbosity (-v, -vv, etc)")
     args = parser.parse_args()
 
@@ -167,10 +168,19 @@ async def main():
         print(f"Failed to register with server: {e}", file=sys.stderr)
         sys.exit(1)
 
+    seconds_per_curve = None  # EMA of observed Stage 2 time per curve; None until first batch completes
+
     while interrupt_level == 0:
         try:
-            # 1. Ask for work. Ask for chunks of size = threads * 10 so we aren't chatting with the server constantly
-            chunk_size = args.threads * 10
+            # Compute how many curves to request.
+            # Target args.hours of wall-clock work, rounded down to a multiple of args.threads
+            # so every thread gets an equal share. Minimum is args.threads so all threads are saturated.
+            if seconds_per_curve is not None:
+                raw = (args.hours * 3600) / seconds_per_curve
+                chunk_size = max(args.threads, (int(raw) // args.threads) * args.threads)
+            else:
+                chunk_size = args.threads  # first batch: just enough to saturate threads
+
             resp = requests.get(f"{args.server}/api/work/cpu", params={"client_name": args.name, "limit": chunk_size})
             if resp.status_code == 404 or not resp.json().get("work_batch"):
                 print("No CPU work available, sleeping...                        ", end="\r", file=sys.stderr)
@@ -197,13 +207,18 @@ async def main():
             for b1, jobs in b1_groups.items():
                 if interrupt_level > 0:
                     break
-                    
+
                 residues = [j["resume_line"] for j in jobs]
                 print(f"Running CPU Stage 2 on {len(residues)} curves with B1={b1}...", file=sys.stderr)
-                
+
                 cpu_proc = CPUProc(ecm_path, args.threads, b1)
                 await cpu_proc.run(residues)
                 duration = time.time() - (cpu_proc.start_time or time.time())
+
+                # Update EMA of seconds-per-curve for future chunk size estimates
+                if len(residues) > 0 and duration > 0:
+                    observed = duration / len(residues)
+                    seconds_per_curve = observed if seconds_per_curve is None else (0.7 * seconds_per_curve + 0.3 * observed)
                 
                 # Check for found factors
                 if cpu_proc.found_factors:
