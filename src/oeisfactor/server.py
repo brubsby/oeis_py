@@ -48,12 +48,15 @@ def submit_gpu_work():
     data = request.json
     client_name = data.get("client_name")
     composite = int(data.get("composite"))
-    residue_line = data.get("residue_line")
+    residue_lines = data.get("residue_lines")
     duration = data.get("duration")
     
+    if not residue_lines or not isinstance(residue_lines, list):
+        return jsonify({"error": "residue_lines must be a non-empty list"}), 400
+        
     try:
-        db.submit_stage_1_curves(composite, residue_line, client_name, duration)
-        return jsonify({"status": "success"}), 200
+        db.submit_stage_1_curves(composite, residue_lines, client_name, duration)
+        return jsonify({"status": "success", "count": len(residue_lines)}), 200
     except Exception as e:
         logger.error(f"Error submitting GPU work: {e}")
         return jsonify({"error": str(e)}), 500
@@ -89,6 +92,8 @@ def submit_cpu_work():
         logger.error(f"Error submitting CPU work: {e}")
         return jsonify({"error": str(e)}), 500
 
+from oeispy.utils import factordb
+
 @app.route('/api/submit/factor', methods=['POST'])
 def submit_factor():
     data = request.json
@@ -96,9 +101,26 @@ def submit_factor():
     composite = int(data.get("composite"))
     factors = data.get("factors") # list of factors found
     
-    # We would need to tell db or `factor` module about the newly found factor
-    # This needs to be hooked up to get_remaining_composites
-    return jsonify({"error": "Not implemented yet"}), 501
+    if not factors or not isinstance(factors, list):
+        return jsonify({"error": "factors must be a non-empty list"}), 400
+
+    try:
+        # 1. Report to FactorDB
+        factordb.report({composite: factors})
+        logger.info(f"Reported factors {factors} for composite {composite} from client {client_name}")
+        
+        # 2. Update local DB logic for new remaining composites
+        # This will remove the old composite record and create new ones for the remaining cofactors
+        remaining = db.get_remaining_composites(composite)
+        
+        return jsonify({
+            "status": "success", 
+            "message": "Factors reported successfully",
+            "remaining_composites": [str(c) for c in remaining]
+        }), 200
+    except Exception as e:
+        logger.error(f"Error submitting factor: {e}")
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

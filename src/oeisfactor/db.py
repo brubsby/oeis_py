@@ -25,7 +25,7 @@ class OEISFactorDB:
     def __init__(self):
         os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
         sqlite3.register_converter("PICKLE", pickle.loads)
-        self.connection = sqlite3.connect(DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES)
+        self.connection = sqlite3.connect(DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES, check_same_thread=False)
         self.create_db()
 
     def cursor(self):
@@ -140,18 +140,45 @@ class OEISFactorDB:
     # METHOD=ECM; SIGMA=16975636616726985561; B1=10000; N=(2^1129+1)/3; X=0x342d705ba8bfc2207ac27682cb14362f8bf7cb4ea665f17ea4de2eb2611b98656eae6ecd51ac88108713a04d9bbad4add3237e67648c5778ba7dd02655d6349024a2bda0966edd2d077d67e52f91e84a946e2431b34033d6d1118e73067d2b8a14ba0d2aaef071cb633212419bb17270bb175d249b40766ac9fcec158efd841bd70a6963ef13f39e827caaeec9; CHECKSUM=1474905577; PROGRAM=GMP-ECM 7.0.6; Y=0x0; X0=0x0; Y0=0x0; WHO=brubsby@bubtop; TIME=Mon Mar  3 00:16:49 2025;
 
 
-    def submit_stage_1_curves(self, composite, residue_line, client_name, duration):
-        values = dict(tuple(kvp.strip().split("=")) for kvp in residue_line.strip().split(";") if kvp)
+    def submit_stage_1_curves(self, composite, residue_lines, client_name, duration):
         cursor = self.connection.cursor()
-        cursor.execute(
+        
+        cursor.execute("SELECT id FROM composite WHERE value = ?", (pickle.dumps(composite),))
+        comp_res = cursor.fetchone()
+        if not comp_res:
+            raise ValueError("Composite not found")
+        composite_id = comp_res['id']
+        
+        cursor.execute("SELECT id FROM client WHERE name = ?", (client_name,))
+        client_res = cursor.fetchone()
+        if not client_res:
+            raise ValueError("Client not found")
+        client_id = client_res['id']
+        
+        insert_data = []
+        # Support single string fallback
+        if isinstance(residue_lines, str):
+            residue_lines = [residue_lines]
+            
+        for residue_line in residue_lines:
+            if not residue_line.strip():
+                continue
+            values = dict(tuple(kvp.strip().split("=")) for kvp in residue_line.strip().split(";") if kvp)
+            insert_data.append((
+                composite_id,
+                client_id,
+                values.get("SIGMA"),
+                residue_line,
+                values.get("B1"),
+                values.get("PARAM"),
+                duration
+            ))
+            
+        cursor.executemany(
             "INSERT INTO stage_1_curve "
             "(composite_id, client_id, sigma, stage_1_resume_line, b1, ecm_param, duration) "
-            "VALUES ((SELECT id FROM composite WHERE value = ?), "
-            "(SELECT id FROM client WHERE name = ?), "
-            "?, ?, ?, ?, ?);",
-            (pickle.dumps(composite), client_name, residue_line,
-             values.get("SIGMA"), values.get("B1"),
-             values.get("PARAM"), duration)
+            "VALUES (?, ?, ?, ?, ?, ?, ?);",
+            insert_data
         )
         # TODO free reservation
         self.connection.commit()
