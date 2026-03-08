@@ -148,13 +148,13 @@ class OEISFactorDB:
         comp_res = cursor.fetchone()
         if not comp_res:
             raise ValueError("Composite not found")
-        composite_id = comp_res['id']
+        composite_id = comp_res[0]
         
         cursor.execute("SELECT id FROM client WHERE name = ?", (client_name,))
         client_res = cursor.fetchone()
         if not client_res:
             raise ValueError("Client not found")
-        client_id = client_res['id']
+        client_id = client_res[0]
         
         insert_data = []
         # Support single string fallback

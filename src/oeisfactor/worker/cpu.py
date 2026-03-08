@@ -18,17 +18,28 @@ def locate_ecm_install():
         sys.exit(1)
     return install_location
 
-async def handle_stdin(queue, stdin):
+async def handle_stdin(residues, stdin):
     try:
-        while not queue.empty():
-            to_send = (await queue.get() + "\n")
-            stdin.write(to_send.encode('utf-8'))
+        for residue in residues:
+            stdin.write((residue + "\n").encode('utf-8'))
             await stdin.drain()
         stdin.close()
     except (BrokenPipeError, ConnectionResetError):
         pass
     except Exception as e:
         logging.error(f"Error handling stdin: {e}")
+
+async def read_stdout(proc, output_queue):
+    try:
+        while True:
+            line = await proc.stdout.readline()
+            if not line:
+                break
+            await output_queue.put(line.decode('utf-8', errors='replace').strip())
+    except Exception as e:
+        logging.error(f"Error reading stdout: {e}")
+    finally:
+        await output_queue.put(None)  # sentinel: this reader is done
 
 class CPUProc:
     def __init__(self, ecm_path, threads, b1):
@@ -43,14 +54,12 @@ class CPUProc:
 
     async def run(self, residue_lines):
         self.start_time = time.time()
-        
-        input_queue = asyncio.Queue()
-        for residue_line in residue_lines:
-            await input_queue.put(residue_line)
-            
+
         cpu_ecm_args = [self.ecm_path, "-resume", "-", str(self.b1)]
-        
-        # Start processes
+
+        # Start processes, giving each its own slice of residues (interleaved partition).
+        # No shared queue means no TOCTOU race where two tasks both pass queue.empty()
+        # but only one item remains, leaving a task blocked in queue.get() forever.
         for i in range(self.threads):
             proc = await asyncio.create_subprocess_exec(
                 *cpu_ecm_args,
@@ -59,50 +68,51 @@ class CPUProc:
                 stderr=asyncio.subprocess.STDOUT
             )
             self.procs.append(proc)
-            self.tasks.append(asyncio.create_task(handle_stdin(input_queue, proc.stdin)))
-            
-        # Monitor outputs
-        all_done = False
-        while not all_done:
+            my_residues = residue_lines[i::self.threads]
+            self.tasks.append(asyncio.create_task(handle_stdin(my_residues, proc.stdin)))
+
+        # Launch one concurrent stdout reader per process feeding a shared queue.
+        # This replaces the sequential readline() loop which would block on a slow/stuck
+        # process while other processes' output piled up unread.
+        output_queue = asyncio.Queue()
+        reader_tasks = [
+            asyncio.create_task(read_stdout(proc, output_queue))
+            for proc in self.procs
+        ]
+        self.tasks.extend(reader_tasks)
+
+        finished_readers = 0
+        while finished_readers < len(self.procs):
             if interrupt_level >= 2:
                 await self.kill()
                 break
-                
-            all_done = True
-            for proc in self.procs:
-                if proc.returncode is not None:
-                    continue
-                    
-                line = await proc.stdout.readline()
-                if line:
-                    all_done = False
-                    line = line.decode('utf-8', errors='replace').strip()
-                    
-                    if line.startswith("Step 2"):
-                        self.completed_lines += 1
-                        print(f"Completed {self.completed_lines}/{len(residue_lines)} CPU curves...                 ", end="\r", file=sys.stderr)
-                    elif line.startswith("Using"):
-                        # Keep track of the last "Using" line, which contains sigma/B1 info right before a factor
-                        self.last_using_line = line
-                    elif line.startswith("********** Factor found in step 2:"):
-                        found_factor = int(line.strip().split(" ")[-1])
-                        self.found_factors.append({
-                            "factor": found_factor,
-                            "using_line": getattr(self, "last_using_line", "Unknown")
-                        })
-                        
-                        print(f"\n*** FOUND FACTOR IN STAGE 2: {found_factor} ***", file=sys.stderr)
-                        
-                        # Immediately kill other procs to avoid wasted work
-                        await self.kill()
-                        return
-                        
-            await asyncio.sleep(0.01)
-            
+
+            line = await output_queue.get()
+            if line is None:  # sentinel: one reader finished
+                finished_readers += 1
+                continue
+
+            if line.startswith("Step 2"):
+                self.completed_lines += 1
+                print(f"Completed {self.completed_lines}/{len(residue_lines)} CPU curves...                 ", end="\r", file=sys.stderr)
+            elif line.startswith("Using"):
+                # Keep track of the last "Using" line, which contains sigma/B1 info right before a factor
+                self.last_using_line = line
+            elif line.startswith("********** Factor found in step 2:"):
+                found_factor = int(line.strip().split(" ")[-1])
+                self.found_factors.append({
+                    "factor": found_factor,
+                    "using_line": getattr(self, "last_using_line", "Unknown")
+                })
+                print(f"\n*** FOUND FACTOR IN STAGE 2: {found_factor} ***", file=sys.stderr)
+                # Immediately kill other procs to avoid wasted work
+                await self.kill()
+                return
+
         # Clean up tasks
         for task in self.tasks:
             task.cancel()
-        
+
         # Wait for all to finish
         for proc in self.procs:
             if proc.returncode is None:

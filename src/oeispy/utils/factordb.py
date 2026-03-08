@@ -67,15 +67,27 @@ class FactorDB():
         try:
             params = {"query": str(self.n)} if self.n else {"id": str(self.id)}
             self.result = _get_session().get(ENDPOINT, params=params)
-            data = self.result.json()
+            
+            if not self.result.ok:
+                raise requests.exceptions.RequestException(f"FactorDB returned status {self.result.status_code}")
+                
+            try:
+                data = self.result.json()
+            except (json.decoder.JSONDecodeError, requests.exceptions.JSONDecodeError) as e:
+                # If it is not JSON, it is usually a 200 OK HTML error page from FactorDB
+                logger.error(f"FactorDB API returned non-JSON response for {self.n or self.id}")
+                raise e
             
             # Cache the result if we have a value and data is valid
             if self.n and data.get("status"):
                 # Transform factors from API format [['2', 1]] to cache format [['2', 1]] (same)
                 factordb_cache.save_local_factors(self.n, data.get("status"), data.get("factors"))
                 
-        except (requests.exceptions.ConnectionError, requests.exceptions.JSONDecodeError, json.decoder.JSONDecodeError) as e:
-            logger.error(e)
+        except (requests.exceptions.ConnectionError, requests.exceptions.JSONDecodeError, json.decoder.JSONDecodeError, requests.exceptions.RequestException) as e:
+            if sleep > 64: # Stop after ~7 retries to prevent infinite recursion
+                logger.error(f"FactorDB connection failed after multiple retries: {e}")
+                return self.result
+            
             time.sleep(sleep)
             return self.connect(True, sleep * 2)
         return self.result
