@@ -76,6 +76,22 @@ def get_cpu_work():
         "work_batch": work_batch
     })
 
+@app.route('/api/submit/cpu/batch', methods=['POST'])
+def submit_cpu_work_batch():
+    data = request.json
+    client_name = data.get("client_name")
+    completions = data.get("completions")
+
+    if not completions or not isinstance(completions, list):
+        return jsonify({"error": "completions must be a non-empty list"}), 400
+
+    try:
+        db.submit_stage_2_curves_batch(completions, client_name)
+        return jsonify({"status": "success", "count": len(completions)}), 200
+    except Exception as e:
+        logger.error(f"Error submitting CPU batch: {e}")
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/submit/cpu', methods=['POST'])
 def submit_cpu_work():
     data = request.json

@@ -184,6 +184,34 @@ class OEISFactorDB:
         # TODO free reservation
         self.connection.commit()
 
+    def submit_stage_2_curves_batch(self, completions, client_name):
+        """Insert multiple stage 2 completions in a single transaction."""
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT id FROM client WHERE name = ?", (client_name,))
+        client_res = cursor.fetchone()
+        if not client_res:
+            raise ValueError("Client not found")
+        client_id = client_res[0]
+
+        insert_data = [
+            (
+                pickle.dumps(gmpy2.mpz(c["composite"])),
+                client_id,
+                c["sigma"],
+                c["b2_start"],
+                c["b2_end"],
+                c["duration"],
+            )
+            for c in completions
+        ]
+        cursor.executemany(
+            "INSERT OR IGNORE INTO stage_2_curve "
+            "(composite_id, client_id, sigma, b2_start, b2_end, duration) "
+            "VALUES ((SELECT id FROM composite WHERE value = ?), ?, ?, ?, ?, ?);",
+            insert_data,
+        )
+        self.connection.commit()
+
     def submit_stage_2_curves(self, composite, sigma, client_name, b2_start, b2_end, duration):
         cursor = self.connection.cursor()
         cursor.execute(
@@ -240,10 +268,10 @@ class OEISFactorDB:
 
     def request_stage2_CPU_work(self, client_name, limit=100):
         cur = self.cursor()
-        
+
         # We get the stage 1 resume line, composite info, and the sigma to identify it
         cur.execute("""
-            SELECT s1.sigma, s1.stage_1_resume_line, s1.b1, s1.ecm_param, 
+            SELECT s1.sigma, s1.stage_1_resume_line, s1.b1, s1.ecm_param,
                    c.value, c.t_level, c.id as composite_id
             FROM stage_1_curve s1
             JOIN composite c ON s1.composite_id = c.id
@@ -252,20 +280,22 @@ class OEISFactorDB:
             ORDER BY c.digits ASC, s1.timestamp ASC
             LIMIT ?;
         """, (limit,))
-        
+
         results = cur.fetchall()
-        
+
+        # No per-row FactorDB validation here — that was making up to `limit` HTTP
+        # requests to factordb.com on every work request, adding minutes of latency.
+        # Externally-factored composites are caught when a factor is submitted.
         work_batch = []
         for row in results:
-            if self.validate_stored_composite_unfactored(row['value']):
-                work_batch.append({
-                    "sigma": row["sigma"],
-                    "resume_line": row["stage_1_resume_line"],
-                    "b1": row["b1"],
-                    "composite": str(row["value"])
-                })
-                # TODO: add reservation so other CPUs don't grab these same curves
-        
+            work_batch.append({
+                "sigma": row["sigma"],
+                "resume_line": row["stage_1_resume_line"],
+                "b1": row["b1"],
+                "composite": str(row["value"])
+            })
+            # TODO: add reservation so other CPUs don't grab these same curves
+
         return work_batch
 
     def make_reservation(self, composite, client_name, t_level_on_completion):

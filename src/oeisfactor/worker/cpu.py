@@ -239,22 +239,24 @@ async def main():
                     except Exception as e:
                         print(f"Failed to submit factors: {e}", file=sys.stderr)
                         
-                # Submit completions for the curves we finished
-                # Note: If we got killed early by finding a factor, we might only submit a few completions,
-                # but for now we'll submit them all. A more robust implementation would track exact completion.
-                for job in jobs:
-                    try:
-                        c_resp = requests.post(f"{args.server}/api/submit/cpu", json={
-                            "client_name": args.name,
-                            "composite": int(job["composite"]),
-                            "sigma": job["sigma"],
-                            "b2_start": b1, # Implicit start
-                            "b2_end": b1 * 100, # Approx B2 bound for ECM
-                            "duration": duration / len(jobs)
-                        })
-                        c_resp.raise_for_status()
-                    except Exception as e:
-                        print(f"Failed to mark CPU curve complete: {e}", file=sys.stderr)
+                # Submit all completions in one batch call instead of one POST per job
+                try:
+                    c_resp = requests.post(f"{args.server}/api/submit/cpu/batch", json={
+                        "client_name": args.name,
+                        "completions": [
+                            {
+                                "composite": int(job["composite"]),
+                                "sigma": job["sigma"],
+                                "b2_start": b1,
+                                "b2_end": b1 * 100,
+                                "duration": duration / len(jobs),
+                            }
+                            for job in jobs
+                        ]
+                    })
+                    c_resp.raise_for_status()
+                except Exception as e:
+                    print(f"Failed to mark CPU curves complete: {e}", file=sys.stderr)
                         
         except requests.exceptions.RequestException as e:
             print(f"\nNetwork error connecting to server: {e}", file=sys.stderr)
