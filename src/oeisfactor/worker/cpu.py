@@ -8,6 +8,7 @@ import signal
 import sys
 import time
 import requests
+from oeispy.utils import ecmtimes
 
 interrupt_level = 0
 
@@ -29,17 +30,17 @@ async def handle_stdin(residues, stdin):
     except Exception as e:
         logging.error(f"Error handling stdin: {e}")
 
-async def read_stdout(proc, output_queue):
+async def read_stdout(proc, proc_index, output_queue):
     try:
         while True:
             line = await proc.stdout.readline()
             if not line:
                 break
-            await output_queue.put(line.decode('utf-8', errors='replace').strip())
+            await output_queue.put((proc_index, line.decode('utf-8', errors='replace').strip()))
     except Exception as e:
         logging.error(f"Error reading stdout: {e}")
     finally:
-        await output_queue.put(None)  # sentinel: this reader is done
+        await output_queue.put((proc_index, None))  # sentinel: this reader is done
 
 class CPUProc:
     def __init__(self, ecm_path, threads, b1):
@@ -51,6 +52,7 @@ class CPUProc:
         self.tasks = []
         self.found_factors = []
         self.completed_lines = 0
+        self.completed_sigmas = set()
 
     async def run(self, residue_lines):
         self.start_time = time.time()
@@ -76,27 +78,33 @@ class CPUProc:
         # process while other processes' output piled up unread.
         output_queue = asyncio.Queue()
         reader_tasks = [
-            asyncio.create_task(read_stdout(proc, output_queue))
-            for proc in self.procs
+            asyncio.create_task(read_stdout(proc, i, output_queue))
+            for i, proc in enumerate(self.procs)
         ]
         self.tasks.extend(reader_tasks)
 
+        current_sigma = {}  # proc_index -> sigma currently being processed
         finished_readers = 0
         while finished_readers < len(self.procs):
             if interrupt_level >= 2:
                 await self.kill()
                 break
 
-            line = await output_queue.get()
+            proc_index, line = await output_queue.get()
             if line is None:  # sentinel: one reader finished
                 finished_readers += 1
                 continue
 
             if line.startswith("Step 2"):
                 self.completed_lines += 1
+                if proc_index in current_sigma:
+                    self.completed_sigmas.add(current_sigma[proc_index])
                 print(f"Completed {self.completed_lines}/{len(residue_lines)} CPU curves...                 ", end="\r", file=sys.stderr)
             elif line.startswith("Using"):
-                # Keep track of the last "Using" line, which contains sigma/B1 info right before a factor
+                # Parse sigma from "Using B1=..., sigma=0:16975636616726985561"
+                m = re.search(r"sigma=\d+:(\d+)", line)
+                if m:
+                    current_sigma[proc_index] = int(m.group(1))
                 self.last_using_line = line
             elif line.startswith("********** Factor found in step 2:"):
                 found_factor = int(line.strip().split(" ")[-1])
@@ -168,15 +176,25 @@ async def main():
         print(f"Failed to register with server: {e}", file=sys.stderr)
         sys.exit(1)
 
-    seconds_per_curve = None  # EMA of observed Stage 2 time per curve; None until first batch completes
+    # speed_factor: ratio of reference-machine time to our observed time (EMA).
+    # Calibrated from actual runs; stable across B1/digit changes because it's
+    # a property of the hardware, not the work. last_b1/last_digits are used
+    # together with ecmtimes to estimate the reference time for the next batch.
+    speed_factor = None
+    last_b1 = None
+    last_digits = None
 
     while interrupt_level == 0:
         try:
-            # Compute how many curves to request.
-            # Target args.hours of wall-clock work, rounded down to a multiple of args.threads
-            # so every thread gets an equal share. Minimum is args.threads so all threads are saturated.
-            if seconds_per_curve is not None:
-                raw = (args.hours * 3600) / seconds_per_curve
+            # Compute how many curves to request based on target hours.
+            # Use the reference timing table scaled by our observed speed factor
+            # so that a B1 change is handled correctly (fast small-B1 curves don't
+            # inflate the estimate for slow large-B1 ones).
+            target_seconds = args.hours * 3600
+            if speed_factor is not None:
+                ref_per_curve = ecmtimes.get_ecm_time(last_digits, last_b1, 1, args.threads)
+                actual_per_curve = ref_per_curve / speed_factor
+                raw = target_seconds / actual_per_curve
                 chunk_size = max(args.threads, (int(raw) // args.threads) * args.threads)
             else:
                 chunk_size = args.threads  # first batch: just enough to saturate threads
@@ -215,10 +233,17 @@ async def main():
                 await cpu_proc.run(residues)
                 duration = time.time() - (cpu_proc.start_time or time.time())
 
-                # Update EMA of seconds-per-curve for future chunk size estimates
+                # Update speed factor from this batch.
+                # speed_factor = reference_time / actual_time (both for the same n curves + threads).
+                # Being a hardware ratio it's stable across B1/digit values, so we can use it
+                # with ecmtimes at any future B1 to get an accurate curve count estimate.
+                digits = len(jobs[0]["composite"])
                 if len(residues) > 0 and duration > 0:
-                    observed = duration / len(residues)
-                    seconds_per_curve = observed if seconds_per_curve is None else (0.7 * seconds_per_curve + 0.3 * observed)
+                    ref_time = ecmtimes.get_ecm_time(digits, b1, len(residues), args.threads)
+                    observed_factor = ref_time / duration
+                    speed_factor = observed_factor if speed_factor is None else (0.7 * speed_factor + 0.3 * observed_factor)
+                    last_b1 = b1
+                    last_digits = digits
                 
                 # Check for found factors
                 if cpu_proc.found_factors:
@@ -255,6 +280,10 @@ async def main():
                         print(f"Failed to submit factors: {e}", file=sys.stderr)
                         
                 # Submit all completions in one batch call instead of one POST per job
+                # If killed mid-batch, only submit curves whose sigma actually completed.
+                completed_jobs = [j for j in jobs if j["sigma"] in cpu_proc.completed_sigmas] if interrupt_level >= 2 else jobs
+                if not completed_jobs:
+                    break
                 try:
                     c_resp = requests.post(f"{args.server}/api/submit/cpu/batch", json={
                         "client_name": args.name,
@@ -264,9 +293,9 @@ async def main():
                                 "sigma": job["sigma"],
                                 "b2_start": b1,
                                 "b2_end": b1 * 100,
-                                "duration": duration / len(jobs),
+                                "duration": duration / len(completed_jobs),
                             }
-                            for job in jobs
+                            for job in completed_jobs
                         ]
                     })
                     c_resp.raise_for_status()

@@ -240,7 +240,7 @@ class OEISFactorDB:
 
     def submit_stage_2_curves_batch(self, completions, client_name):
         """Insert multiple stage 2 completions in a single transaction and update t-levels."""
-        cursor = self.connection.cursor()
+        cursor = self.cursor()
         cursor.execute("SELECT id FROM client WHERE name = ?", (client_name,))
         client_res = cursor.fetchone()
         if not client_res:
