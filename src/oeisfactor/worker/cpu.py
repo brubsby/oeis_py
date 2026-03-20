@@ -289,7 +289,7 @@ async def main():
 
             t0 = time.time()
             resp = requests.get(f"{args.server}/api/work/cpu", params={"client_name": args.name, "limit": chunk_size})
-            logging.info(f"Stage-2 work request took {time.time() - t0:.2f}s")
+            logging.debug(f"Stage-2 work request took {time.time() - t0:.2f}s")
             if resp.status_code == 404 or not resp.json().get("work_batch"):
                 # No stage-2 residues available — fall back to running full ECM curves
                 t0 = time.time()
@@ -297,7 +297,7 @@ async def main():
                     "client_name": args.name,
                     "digit_limit": 300,
                 })
-                logging.info(f"Full ECM work request took {time.time() - t0:.2f}s")
+                logging.debug(f"Full ECM work request took {time.time() - t0:.2f}s")
                 if full_resp.status_code == 404:
                     print("No work available, sleeping...                        ", end="\r", file=sys.stderr)
                     await asyncio.sleep(10)

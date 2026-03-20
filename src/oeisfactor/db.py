@@ -349,51 +349,21 @@ class OEISFactorDB:
     def request_full_CPU_work(self, client_name, digit_limit=300, t_step=1):
         """Select best composite and return curves+B1 needed to reach the next t-level milestone.
 
-        Uses get_suggestion_curves to compute exactly how many curves at what B1 are needed
-        to advance the composite by t_step t-levels. The client should run at most this many
-        curves, truncating to fit within its time budget.
+        The SQL query orders by t_level ASC, digits ASC, which already gives the optimal
+        composite (lowest t_level wins; ties broken by fewest digits — equivalent to the
+        scoring formula (b1 * digits^2) / delta_t since b1 and delta_t are both determined
+        solely by t_level+t_step).
         """
-        best_composite = None
-        best_score = float('inf')
-        best_b1 = None
-        best_curves = None
-
-        for i, row in enumerate(self.iter_unfactored_composites(digit_limit, validate=False)):
-            if i >= 50:
-                break
-
+        for row in self.iter_unfactored_composites(digit_limit, validate=False):
             t_level_val = float(row['t_level'] or 0)
-            digits = int(row['digits'])
             target_t = t_level_val + t_step
 
-            existing_curves, existing_b1 = t_level.get_t_level_curves(t_level_val)
-            input_lines = [(existing_curves, existing_b1, None, 1)] if t_level_val > 0 else []
-
-            suggested_curves, b1, _, _, _ = t_level.get_suggestion_curves(
-                input_lines, t_level_val, target_t, None, None, 1, 1
+            suggested_curves, b1, _, _, new_t_level = t_level.get_suggestion_curves_from_t_levels(
+                t_level_val, target_t
             )
+            if new_t_level > t_level_val:
+                return row['value'], b1, suggested_curves, row['expression'], t_level_val
 
-            new_t_level = t_level.get_t_level([
-                *input_lines,
-                (suggested_curves, b1, b1, 1)
-            ])
-            delta_t = new_t_level - t_level_val
-
-            if delta_t <= 0:
-                continue
-
-            score = (b1 * (digits ** 2)) / delta_t
-
-            if score < best_score:
-                best_score = score
-                best_composite = row['value']
-                best_b1 = b1
-                best_curves = suggested_curves
-                best_expression = row['expression']
-                best_t_level = t_level_val
-
-        if best_composite:
-            return best_composite, best_b1, best_curves, best_expression, best_t_level
         return None
 
     def submit_full_cpu_curves(self, composite, curve_groups, client_name):
