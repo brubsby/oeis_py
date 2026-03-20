@@ -36,20 +36,37 @@ class GPUProc:
         self.estimated_end_time = None
         self.lines = []
 
+    async def _print_status(self):
+        try:
+            while True:
+                elapsed = time.time() - self.start_time
+                if self.estimated_end_time is not None:
+                    total = self.estimated_end_time - self.start_time
+                    pct = min(100.0, 100.0 * elapsed / total) if total > 0 else 0
+                    remaining = max(0, self.estimated_end_time - time.time())
+                    print(f"GPU ECM: {pct:.1f}% (~{int(remaining)}s remaining)          ", end="\r", file=sys.stderr)
+                else:
+                    print(f"GPU ECM: starting... ({int(elapsed)}s elapsed)          ", end="\r", file=sys.stderr)
+                await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            pass
+
     async def run(self):
         gpu_device_args = ["-gpudevice", str(self.gpu_device)] if self.gpu_device is not None else []
         gpu_curves_args = ["-gpucurves", str(self.gpu_curves)] if self.gpu_curves is not None else []
         gpu_ecm_args = [self.ecm_path] + gpu_device_args + gpu_curves_args + ["-gpu", "-v", "-save", self.save_file_path, str(self.b1), "0"]
-        
+
         self.gpu_proc = await asyncio.create_subprocess_exec(
             *gpu_ecm_args, stdout=asyncio.subprocess.PIPE, stdin=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT)
-        
+
         self.start_time = time.time()
         self.gpu_proc.stdin.write(str(self.composite).encode() + b"\n")
         await self.gpu_proc.stdin.drain()
         self.gpu_proc.stdin.close()
-        
+
+        status_task = asyncio.create_task(self._print_status())
+
         # Read output line by line
         while True:
             line = await self.gpu_proc.stdout.readline()
@@ -60,13 +77,16 @@ class GPUProc:
             match = re.search(r"ETA (\d+) \+ (\d+) = (\d+) seconds?", line)
             if match:
                 self.estimated_end_time = int(match.group(1)) + time.time()
-                
+
             if interrupt_level >= 2:
                 try:
                     self.gpu_proc.kill()
                 except ProcessLookupError:
                     pass
-                
+
+        status_task.cancel()
+        await asyncio.gather(status_task, return_exceptions=True)
+        print("", file=sys.stderr)  # clear the status line
         await self.gpu_proc.wait()
         return self.gpu_proc.returncode
 

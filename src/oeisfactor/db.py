@@ -1,4 +1,5 @@
 import logging
+import math
 import os
 import re
 import sqlite3
@@ -356,7 +357,7 @@ class OEISFactorDB:
         """
         for row in self.iter_unfactored_composites(digit_limit, validate=False):
             t_level_val = float(row['t_level'] or 0)
-            target_t = t_level_val + t_step
+            target_t = math.floor(t_level_val) + t_step
 
             suggested_curves, b1, _, _, new_t_level = t_level.get_suggestion_curves_from_t_levels(
                 t_level_val, target_t
