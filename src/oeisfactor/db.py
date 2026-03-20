@@ -309,8 +309,8 @@ class OEISFactorDB:
         best_b1 = None
         
         # Check the top theoretical easiest composites
-        for i, row in enumerate(self.iter_unfactored_composites(digit_limit, skip_with_outstanding_residues=True)):
-            if i >= 50: 
+        for i, row in enumerate(self.iter_unfactored_composites(digit_limit, skip_with_outstanding_residues=True, validate=False)):
+            if i >= 50:
                 break
                 
             t_level_val = float(row['t_level'] or 0)
@@ -346,7 +346,7 @@ class OEISFactorDB:
 
         return None
 
-    def request_full_CPU_work(self, client_name, digit_limit=300, t_step=5):
+    def request_full_CPU_work(self, client_name, digit_limit=300, t_step=1):
         """Select best composite and return curves+B1 needed to reach the next t-level milestone.
 
         Uses get_suggestion_curves to compute exactly how many curves at what B1 are needed
@@ -358,7 +358,7 @@ class OEISFactorDB:
         best_b1 = None
         best_curves = None
 
-        for i, row in enumerate(self.iter_unfactored_composites(digit_limit)):
+        for i, row in enumerate(self.iter_unfactored_composites(digit_limit, validate=False)):
             if i >= 50:
                 break
 
@@ -660,10 +660,14 @@ class OEISFactorDB:
             else:
                 return self.get_easiest_composite(digit_limit=digit_limit, pretest=pretest, delta_t=delta_t, threads=threads)
 
-    def iter_unfactored_composites(self, digit_limit=500, pretest=0.3, skip_with_outstanding_residues=False):
-        """Yields valid, unfactored composites from easiest to hardest (by t_level)."""
+    def iter_unfactored_composites(self, digit_limit=500, pretest=0.3, skip_with_outstanding_residues=False, validate=True):
+        """Yields valid, unfactored composites from easiest to hardest (by t_level).
+
+        Set validate=False to skip FactorDB HTTP lookups (composites that got
+        factored externally will be caught at factor-submission time instead).
+        """
         cur = self.cursor()
-        
+
         if skip_with_outstanding_residues:
             # We filter out any composite that has a row in stage_1_curve without a matching row in stage_2_curve
             query = """
@@ -689,7 +693,7 @@ class OEISFactorDB:
         cur.execute(query, (digit_limit, pretest))
         
         for row in cur.fetchall():
-            if self.validate_stored_composite_unfactored(row['value']):
+            if not validate or self.validate_stored_composite_unfactored(row['value']):
                 yield row
 
     def get_smallest_t_level_composite(self, digit_limit=500, factor_requirement=None):

@@ -168,6 +168,9 @@ class CPUProcFull:
             self.tasks.append(asyncio.create_task(handle_stdin([composite_str], proc.stdin)))
             self.tasks.append(asyncio.create_task(read_stdout(proc, i, output_queue)))
 
+        total_curves = self.threads * curves_per_thread
+        print(f"Completed 0/{total_curves} full ECM curves...                 ", end="\r", file=sys.stderr)
+
         current_sigma = {}
         current_b2 = {}
         finished_readers = 0
@@ -184,7 +187,7 @@ class CPUProcFull:
             if line.startswith("Step 2"):
                 if proc_index in current_sigma:
                     self.completed_curves.append((current_sigma[proc_index], current_b2.get(proc_index)))
-                print(f"Completed {self.completed_count} full ECM curves...                 ", end="\r", file=sys.stderr)
+                print(f"Completed {self.completed_count}/{total_curves} full ECM curves...                 ", end="\r", file=sys.stderr)
             elif line.startswith("Using"):
                 m_sigma = re.search(r"sigma=\d+:(\d+)", line)
                 m_b2 = re.search(r"B2=(\d+)", line)
@@ -284,13 +287,17 @@ async def main():
             else:
                 chunk_size = args.threads  # first batch: just enough to saturate threads
 
+            t0 = time.time()
             resp = requests.get(f"{args.server}/api/work/cpu", params={"client_name": args.name, "limit": chunk_size})
+            logging.info(f"Stage-2 work request took {time.time() - t0:.2f}s")
             if resp.status_code == 404 or not resp.json().get("work_batch"):
                 # No stage-2 residues available — fall back to running full ECM curves
+                t0 = time.time()
                 full_resp = requests.get(f"{args.server}/api/work/cpu/full", params={
                     "client_name": args.name,
                     "digit_limit": 300,
                 })
+                logging.info(f"Full ECM work request took {time.time() - t0:.2f}s")
                 if full_resp.status_code == 404:
                     print("No work available, sleeping...                        ", end="\r", file=sys.stderr)
                     await asyncio.sleep(10)
