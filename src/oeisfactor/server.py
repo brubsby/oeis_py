@@ -35,11 +35,13 @@ def get_gpu_work():
     
     work = db.request_stage1_GPU_work(client_name, digit_limit=digit_limit, curves=curves)
     if work:
-        composite, b1, completion_time = work
+        composite, b1, completion_time, expression, t_level_val = work
         return jsonify({
             "composite": str(composite),
             "b1": b1,
-            "completion_time": completion_time
+            "completion_time": completion_time,
+            "expression": expression,
+            "t_level": t_level_val,
         })
     else:
         return jsonify({"status": "no work available"}), 404
@@ -86,8 +88,8 @@ def submit_cpu_work_batch():
         return jsonify({"error": "completions must be a non-empty list"}), 400
 
     try:
-        db.submit_stage_2_curves_batch(completions, client_name)
-        return jsonify({"status": "success", "count": len(completions)}), 200
+        new_t_levels = db.submit_stage_2_curves_batch(completions, client_name)
+        return jsonify({"status": "success", "count": len(completions), "new_t_levels": new_t_levels}), 200
     except Exception as e:
         logger.error(f"Error submitting CPU batch: {e}")
         return jsonify({"error": str(e)}), 500
@@ -107,6 +109,37 @@ def submit_cpu_work():
         return jsonify({"status": "success"}), 200
     except Exception as e:
         logger.error(f"Error submitting CPU work: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/work/cpu/full', methods=['GET'])
+def get_full_cpu_work():
+    client_name = request.args.get("client_name")
+    if not client_name:
+        return jsonify({"error": "client_name is required"}), 400
+
+    digit_limit = int(request.args.get("digit_limit", 300))
+
+    work = db.request_full_CPU_work(client_name, digit_limit=digit_limit)
+    if work:
+        composite, b1, suggested_curves, expression, t_level_val = work
+        return jsonify({"composite": str(composite), "b1": b1, "suggested_curves": suggested_curves, "expression": expression, "t_level": t_level_val})
+    return jsonify({"status": "no work available"}), 404
+
+@app.route('/api/submit/cpu/full', methods=['POST'])
+def submit_full_cpu_work():
+    data = request.json
+    client_name = data.get("client_name")
+    composite = data.get("composite")
+    curve_groups = data.get("curve_groups")  # [{count, b1, b2, ecm_param}]
+
+    if not curve_groups:
+        return jsonify({"error": "curve_groups required"}), 400
+
+    try:
+        new_t = db.submit_full_cpu_curves(composite, curve_groups, client_name)
+        return jsonify({"status": "success", "new_t_level": new_t}), 200
+    except Exception as e:
+        logger.error(f"Error submitting full CPU curves: {e}")
         return jsonify({"error": str(e)}), 500
 
 from oeispy.utils import factordb

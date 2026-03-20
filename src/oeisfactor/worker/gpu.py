@@ -124,8 +124,10 @@ async def main():
                 
                 composite = int(work["composite"])
                 b1 = int(work["b1"])
-                
-                print(f"\nGot work: Composite C{len(str(composite))} with B1={b1}", file=sys.stderr)
+                expression = work.get("expression") or f"C{len(str(composite))}"
+                t_level_val = work.get("t_level", 0)
+
+                print(f"\nGot work: {expression} (C{len(str(composite))}) t{t_level_val:.1f} B1={b1}", file=sys.stderr)
                 
                 # 2. Run GPU-ECM
                 save_file_path = os.path.join(tmpdir, f"gpu_save_{int(time.time())}.txt")

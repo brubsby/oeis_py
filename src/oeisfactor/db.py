@@ -279,6 +279,17 @@ class OEISFactorDB:
 
         self.connection.commit()
 
+        # Return new t_levels keyed by composite string
+        new_t_levels = {}
+        for c in completions:
+            composite_key = pickle.dumps(gmpy2.mpz(c["composite"]))
+            if composite_key not in new_t_levels:
+                cursor.execute("SELECT t_level, expression FROM composite WHERE value = ?", (composite_key,))
+                row = cursor.fetchone()
+                if row:
+                    new_t_levels[c["composite"]] = {"t_level": row["t_level"], "expression": row["expression"]}
+        return new_t_levels
+
     def submit_stage_2_curves(self, composite, sigma, client_name, b2_start, b2_end, duration):
         cursor = self.connection.cursor()
         cursor.execute(
@@ -326,12 +337,92 @@ class OEISFactorDB:
                 best_score = score
                 best_composite = row['value']
                 best_b1 = b1
-                
+                best_expression = row['expression']
+                best_t_level = t_level_val
+
         if best_composite:
             # TODO: self.make_reservation(best_composite, client_name, ...)
-            return best_composite, best_b1, 0
-            
+            return best_composite, best_b1, 0, best_expression, best_t_level
+
         return None
+
+    def request_full_CPU_work(self, client_name, digit_limit=300, t_step=5):
+        """Select best composite and return curves+B1 needed to reach the next t-level milestone.
+
+        Uses get_suggestion_curves to compute exactly how many curves at what B1 are needed
+        to advance the composite by t_step t-levels. The client should run at most this many
+        curves, truncating to fit within its time budget.
+        """
+        best_composite = None
+        best_score = float('inf')
+        best_b1 = None
+        best_curves = None
+
+        for i, row in enumerate(self.iter_unfactored_composites(digit_limit)):
+            if i >= 50:
+                break
+
+            t_level_val = float(row['t_level'] or 0)
+            digits = int(row['digits'])
+            target_t = t_level_val + t_step
+
+            existing_curves, existing_b1 = t_level.get_t_level_curves(t_level_val)
+            input_lines = [(existing_curves, existing_b1, None, 1)] if t_level_val > 0 else []
+
+            suggested_curves, b1, _, _, _ = t_level.get_suggestion_curves(
+                input_lines, t_level_val, target_t, None, None, 1, 1
+            )
+
+            new_t_level = t_level.get_t_level([
+                *input_lines,
+                (suggested_curves, b1, b1, 1)
+            ])
+            delta_t = new_t_level - t_level_val
+
+            if delta_t <= 0:
+                continue
+
+            score = (b1 * (digits ** 2)) / delta_t
+
+            if score < best_score:
+                best_score = score
+                best_composite = row['value']
+                best_b1 = b1
+                best_curves = suggested_curves
+                best_expression = row['expression']
+                best_t_level = t_level_val
+
+        if best_composite:
+            return best_composite, best_b1, best_curves, best_expression, best_t_level
+        return None
+
+    def submit_full_cpu_curves(self, composite, curve_groups, client_name):
+        """Update t_level directly from full CPU ECM runs (no stage_1/stage_2 records).
+
+        curve_groups: list of dicts with {count, b1, b2, ecm_param}
+        """
+        cursor = self.cursor()
+        composite_mpz = gmpy2.mpz(str(composite))
+        cursor.execute("SELECT id, t_level FROM composite WHERE value = ?", (pickle.dumps(composite_mpz),))
+        row = cursor.fetchone()
+        if not row:
+            raise ValueError("Composite not found")
+        composite_id, current_t = row['id'], float(row['t_level'] or 0)
+
+        curve_tuples = []
+        if current_t > 0:
+            baseline_curves, baseline_b1 = t_level.get_t_level_curves(current_t)
+            curve_tuples.append((baseline_curves, baseline_b1, None, 1))
+        for g in curve_groups:
+            curve_tuples.append((g['count'], g['b1'], g['b2'], g.get('ecm_param') or 1))
+
+        new_t = t_level.get_t_level(curve_tuples)
+        cursor.execute(
+            "UPDATE composite SET t_level = MAX(?, IFNULL(t_level, 0)) WHERE id = ?",
+            (new_t, composite_id)
+        )
+        self.connection.commit()
+        return new_t
 
     def request_stage2_CPU_work(self, client_name, limit=100):
         cur = self.cursor()
@@ -339,7 +430,7 @@ class OEISFactorDB:
         # We get the stage 1 resume line, composite info, and the sigma to identify it
         cur.execute("""
             SELECT s1.sigma, s1.stage_1_resume_line, s1.b1, s1.ecm_param,
-                   c.value, c.t_level, c.id as composite_id
+                   c.value, c.t_level, c.expression, c.id as composite_id
             FROM stage_1_curve s1
             JOIN composite c ON s1.composite_id = c.id
             LEFT JOIN stage_2_curve s2 ON s1.sigma = s2.sigma AND s1.composite_id = s2.composite_id
@@ -359,7 +450,9 @@ class OEISFactorDB:
                 "sigma": row["sigma"],
                 "resume_line": row["stage_1_resume_line"],
                 "b1": row["b1"],
-                "composite": str(row["value"])
+                "composite": str(row["value"]),
+                "expression": row["expression"],
+                "t_level": row["t_level"],
             })
             # TODO: add reservation so other CPUs don't grab these same curves
 
