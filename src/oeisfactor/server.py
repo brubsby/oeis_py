@@ -1,11 +1,25 @@
 import logging
+import math
 import threading
+import time
 import gmpy2
 from flask import Flask, request, jsonify
 from oeisfactor.db import OEISFactorDB, WorkerPreferences, CompositeOrdering, _compute_optimal_gpu_b1
+from oeisfactor.worker.common import fmt_seconds
 
 # Number of upcoming GPU composites to pre-warm the B1 cache for
 GPU_WARMUP_LOOKAHEAD = 5
+
+# --- PID controller configuration ---
+TARGET_BUFFER_SECONDS = 86400  # target queue depth: 1 day of current-fleet capacity
+THROUGHPUT_WINDOW_SECONDS = 21600  # 6h rolling window for throughput T measurement
+K_MIN = 0.1                 # minimum B2 multiplier (B2 = B1 * 100 * k)
+K_MAX = 10.0                # maximum B2 multiplier
+K_MIN_LOG = math.log10(K_MIN)   # -1.0
+K_MAX_LOG = math.log10(K_MAX)   # +1.0
+PID_KP = 1e-8               # proportional gain  (tune empirically)
+PID_KI = 1e-11              # integral gain
+PID_KD = 1e-6               # derivative gain (on PV, not error)
 
 app = Flask(__name__)
 db = OEISFactorDB()
@@ -35,6 +49,47 @@ def _background_warm_gpu_cache(curves: int, n: int = GPU_WARMUP_LOOKAHEAD):
 
 # Warm cache on startup for the default GPU curve count
 threading.Thread(target=_background_warm_gpu_cache, args=(8192,), daemon=True).start()
+
+# --- PID controller ---
+_current_b2_multiplier = 1.0
+
+def _run_pid_tick():
+    global _current_b2_multiplier
+    now = time.time()
+    u, integral, last_pv, last_update = db.get_pid_state()
+
+    dt = now - last_update if last_update > 0 else 0
+
+    pv = db.get_pending_stage2_pv()
+    T = db.get_throughput_t(THROUGHPUT_WINDOW_SECONDS)
+
+    if T < 1e-10:
+        # No throughput data yet — hold at neutral, reset state
+        logger.debug("PID: no throughput data yet, holding k=1.0")
+        db.update_pid_state(0.0, 0.0, pv, now)
+        _current_b2_multiplier = 1.0
+        return
+
+    sp = T * TARGET_BUFFER_SECONDS
+    error = sp - pv
+
+    # Derivative on PV (not error) to avoid derivative kick on setpoint changes
+    d_pv = (pv - last_pv) / dt if dt > 0 else 0.0
+
+    u_raw = PID_KP * error + integral - PID_KD * d_pv
+    u_clamped = max(K_MIN_LOG, min(K_MAX_LOG, u_raw))
+
+    # Anti-windup: only accumulate integral when not saturated in the wrong direction
+    if (u_raw > K_MAX_LOG and error > 0) or (u_raw < K_MIN_LOG and error < 0):
+        new_integral = integral  # saturated and error keeps pushing → freeze
+    else:
+        new_integral = integral + PID_KI * error * dt
+
+    k = 10 ** u_clamped
+    _current_b2_multiplier = k
+    db.update_pid_state(u_clamped, new_integral, pv, now)
+    logger.info(f"PID: PV={fmt_seconds(pv)} SP={fmt_seconds(sp)} err={fmt_seconds(error)} u={u_clamped:.3f} k={k:.3f}")
+
 
 @app.route('/api/worker/register', methods=['POST'])
 def register_worker():
@@ -92,6 +147,7 @@ def submit_gpu_work():
         
     try:
         db.submit_stage_1_curves(composite, residue_lines, client_name, duration)
+        threading.Thread(target=_run_pid_tick, daemon=True).start()
         return jsonify({"status": "success", "count": len(residue_lines)}), 200
     except Exception as e:
         logger.error(f"Error submitting GPU work: {e}")
@@ -105,10 +161,11 @@ def get_cpu_work():
     
     limit = int(request.args.get("limit", 100))
     work_batch = db.request_stage2_CPU_work(client_name, limit=limit)
-    
+
     return jsonify({
         "status": "success",
-        "work_batch": work_batch
+        "work_batch": work_batch,
+        "b2_multiplier": _current_b2_multiplier,
     })
 
 @app.route('/api/submit/cpu/batch', methods=['POST'])
@@ -122,6 +179,7 @@ def submit_cpu_work_batch():
 
     try:
         new_t_levels = db.submit_stage_2_curves_batch(completions, client_name)
+        threading.Thread(target=_run_pid_tick, daemon=True).start()
         return jsonify({"status": "success", "count": len(completions), "new_t_levels": new_t_levels}), 200
     except Exception as e:
         logger.error(f"Error submitting CPU batch: {e}")

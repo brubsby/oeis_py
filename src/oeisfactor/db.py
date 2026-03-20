@@ -81,6 +81,7 @@ class OEISFactorDB:
         sqlite3.register_converter("PICKLE", pickle.loads)
         self.connection = sqlite3.connect(DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES, check_same_thread=False)
         self.create_db()
+        self._migrate()
 
     def cursor(self):
         cursor = self.connection.cursor()
@@ -146,7 +147,7 @@ class OEISFactorDB:
         CREATE TABLE IF NOT EXISTS stage_1_curve(
             composite_id INTEGER REFERENCES composite(id) ON DELETE CASCADE,
             client_id INTEGER REFERENCES client(id) ON DELETE SET NULL,
-            stage_1_resume_line TEXT NOT NULL,
+            stage_1_resume_line TEXT,
             sigma INTEGER NOT NULL,
             b1 INTEGER NOT NULL,
             ecm_param INTEGER,
@@ -170,6 +171,15 @@ class OEISFactorDB:
             PRIMARY KEY (composite_id, sigma, b2_start)
         );
         
+        CREATE TABLE IF NOT EXISTS pid_state (
+            id INTEGER PRIMARY KEY DEFAULT 1,
+            u REAL NOT NULL DEFAULT 0,
+            integral REAL NOT NULL DEFAULT 0,
+            last_pv REAL NOT NULL DEFAULT 0,
+            last_update REAL NOT NULL DEFAULT 0
+        );
+        INSERT OR IGNORE INTO pid_state(id, u, integral, last_pv, last_update) VALUES (1, 0, 0, 0, 0);
+
         CREATE TABLE IF NOT EXISTS reservation(
             composite_id INTEGER REFERENCES composite(id) ON DELETE CASCADE,
             client_id INTEGER REFERENCES client(id) ON DELETE CASCADE,
@@ -180,6 +190,42 @@ class OEISFactorDB:
             PRIMARY KEY (composite_id, client_id, client_type)
         );
         """)
+
+    def _migrate(self):
+        """Apply additive schema migrations safe to run on every startup."""
+        cur = self.connection.cursor()
+
+        # Add ecmtime_reference column to stage_2_curve if missing
+        try:
+            cur.execute("ALTER TABLE stage_2_curve ADD COLUMN ecmtime_reference REAL")
+            self.connection.commit()
+        except sqlite3.OperationalError:
+            pass  # column already exists
+
+        # Drop NOT NULL from stage_1_resume_line so we can null it after stage-2 completes
+        cur.execute("PRAGMA table_info(stage_1_curve)")
+        for col in cur.fetchall():
+            if col[1] == 'stage_1_resume_line' and col[3] == 1:  # notnull=1
+                cur.executescript("""
+                    BEGIN;
+                    CREATE TABLE stage_1_curve_new (
+                        composite_id INTEGER REFERENCES composite(id) ON DELETE CASCADE,
+                        client_id    INTEGER REFERENCES client(id) ON DELETE SET NULL,
+                        stage_1_resume_line TEXT,
+                        sigma        INTEGER NOT NULL,
+                        b1           INTEGER NOT NULL,
+                        ecm_param    INTEGER,
+                        timestamp    INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        duration     INTEGER,
+                        counted_in_t_level INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY (composite_id, sigma, b1)
+                    );
+                    INSERT INTO stage_1_curve_new SELECT * FROM stage_1_curve;
+                    DROP TABLE stage_1_curve;
+                    ALTER TABLE stage_1_curve_new RENAME TO stage_1_curve;
+                    COMMIT;
+                """)
+                break
 
     def register_client(self, name, type="CPU"):
         cursor = self.connection.cursor()
@@ -277,18 +323,18 @@ class OEISFactorDB:
             "UPDATE composite SET t_level = MAX(?, IFNULL(t_level, 0)) WHERE id = ?",
             (new_t, composite_id)
         )
-        # Mark the newly counted stage_1 curves (those whose stage_2 we just counted)
+        # Delete stage_1 rows whose stage_2 is now complete, then the stage_2 rows.
+        # stage_1 must be deleted first while stage_2 still exists to identify the sigmas.
         cursor.execute("""
-            UPDATE stage_1_curve SET counted_in_t_level = 1
-            WHERE composite_id = ? AND counted_in_t_level = 0
+            DELETE FROM stage_1_curve
+            WHERE composite_id = ?
               AND sigma IN (
                   SELECT sigma FROM stage_2_curve
                   WHERE composite_id = ? AND counted_in_t_level = 0
               )
         """, (composite_id, composite_id))
-        # Mark the newly counted stage_2 curves
         cursor.execute("""
-            UPDATE stage_2_curve SET counted_in_t_level = 1
+            DELETE FROM stage_2_curve
             WHERE composite_id = ? AND counted_in_t_level = 0
         """, (composite_id,))
 
@@ -301,6 +347,7 @@ class OEISFactorDB:
             raise ValueError("Client not found")
         client_id = client_res[0]
 
+        from oeispy.utils.ecmtimes import get_ecm_stage2_time
         insert_data = [
             (
                 pickle.dumps(gmpy2.mpz(c["composite"])),
@@ -309,14 +356,22 @@ class OEISFactorDB:
                 c["b2_start"],
                 c["b2_end"],
                 c["duration"],
+                get_ecm_stage2_time(len(c["composite"]), c["b2_start"], c["b2_end"]),
             )
             for c in completions
         ]
         cursor.executemany(
             "INSERT OR IGNORE INTO stage_2_curve "
-            "(composite_id, client_id, sigma, b2_start, b2_end, duration) "
-            "VALUES ((SELECT id FROM composite WHERE value = ?), ?, ?, ?, ?, ?);",
+            "(composite_id, client_id, sigma, b2_start, b2_end, duration, ecmtime_reference) "
+            "VALUES ((SELECT id FROM composite WHERE value = ?), ?, ?, ?, ?, ?, ?);",
             insert_data,
+        )
+
+        # Resume lines are no longer needed once stage-2 is recorded
+        cursor.executemany(
+            "UPDATE stage_1_curve SET stage_1_resume_line = NULL "
+            "WHERE sigma = ? AND composite_id = (SELECT id FROM composite WHERE value = ?)",
+            [(c["sigma"], pickle.dumps(gmpy2.mpz(c["composite"]))) for c in completions],
         )
 
         # Recalculate t-level for each distinct composite in this batch (usually just one)
@@ -482,6 +537,55 @@ class OEISFactorDB:
     def get_optimal_gpu_b1(self, gpu_curves, existing_t_level):
         return _compute_optimal_gpu_b1(gpu_curves, round(existing_t_level, 1))
 
+
+    def get_pid_state(self):
+        """Return (u, integral, last_pv, last_update) from the single pid_state row."""
+        cur = self.cursor()
+        cur.execute("SELECT u, integral, last_pv, last_update FROM pid_state WHERE id = 1")
+        row = cur.fetchone()
+        if row:
+            return float(row['u']), float(row['integral']), float(row['last_pv']), float(row['last_update'])
+        return 0.0, 0.0, 0.0, 0.0
+
+    def update_pid_state(self, u, integral, last_pv, last_update):
+        cur = self.cursor()
+        cur.execute(
+            "UPDATE pid_state SET u=?, integral=?, last_pv=?, last_update=? WHERE id=1",
+            (u, integral, last_pv, last_update)
+        )
+        self.connection.commit()
+
+    def get_pending_stage2_pv(self):
+        """Sum of reference stage-2 ecmtime (at B2=B1*100) for all pending stage-1 residues."""
+        cur = self.cursor()
+        cur.execute("""
+            SELECT c.digits, s1.b1, COUNT(*) as n
+            FROM stage_1_curve s1
+            JOIN composite c ON s1.composite_id = c.id
+            LEFT JOIN stage_2_curve s2 ON s1.sigma = s2.sigma AND s1.composite_id = s2.composite_id
+            WHERE s2.sigma IS NULL
+            GROUP BY c.digits, s1.b1
+        """)
+        from oeispy.utils.ecmtimes import get_ecm_stage2_time
+        pv = 0.0
+        for row in cur.fetchall():
+            b1 = int(row['b1'])
+            pv += row['n'] * get_ecm_stage2_time(int(row['digits']), b1, b1 * 100)
+        return pv
+
+    def get_throughput_t(self, window_seconds=21600):
+        """T = reference CPU-seconds completed per real second over a rolling window."""
+        cur = self.cursor()
+        since = int(time.time() - window_seconds)
+        cur.execute("""
+            SELECT SUM(ecmtime_reference) as total
+            FROM stage_2_curve
+            WHERE timestamp > datetime(?, 'unixepoch')
+              AND ecmtime_reference IS NOT NULL
+        """, (since,))
+        row = cur.fetchone()
+        total = float(row['total'] or 0)
+        return total / window_seconds if window_seconds > 0 else 0.0
 
     def add_sequence(self, sequence_id, more=None, factor_requirement=None, first_unknown_n=None, first_unknown_k=None):
         cursor = self.connection.cursor()

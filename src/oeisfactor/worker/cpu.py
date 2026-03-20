@@ -42,10 +42,11 @@ async def read_stdout(proc, proc_index, output_queue):
         await output_queue.put((proc_index, None))  # sentinel: this reader is done
 
 class CPUProc:
-    def __init__(self, ecm_path, threads, b1):
+    def __init__(self, ecm_path, threads, b1, b2):
         self.ecm_path = ecm_path
         self.threads = threads
         self.b1 = b1
+        self.b2 = b2
         self.start_time = None
         self.procs = []
         self.tasks = []
@@ -56,7 +57,7 @@ class CPUProc:
     async def run(self, residue_lines):
         self.start_time = time.time()
 
-        cpu_ecm_args = [self.ecm_path, "-resume", "-", str(self.b1)]
+        cpu_ecm_args = [self.ecm_path, "-resume", "-", str(self.b1), str(self.b2)]
 
         # Start processes, giving each its own slice of residues (interleaved partition).
         # No shared queue means no TOCTOU race where two tasks both pass queue.empty()
@@ -260,14 +261,18 @@ async def main():
                 ref_per_curve = ecmtimes.get_ecm_time(last_digits, last_b1, 1, args.threads)
                 actual_per_curve = ref_per_curve / speed_factor
                 raw = target_seconds / actual_per_curve
-                chunk_size = max(args.threads, (int(raw) // args.threads) * args.threads)
+                raw_chunk = max(args.threads, (int(raw) // args.threads) * args.threads)
+                # Cap growth to 4x previous batch to limit damage from miscalibration
+                chunk_size = min(raw_chunk, chunk_size * 4)
             else:
                 chunk_size = args.threads  # first batch: just enough to saturate threads
 
             t0 = time.time()
             resp = requests.get(f"{args.server}/api/work/cpu", params={"client_name": args.name, "limit": chunk_size})
             logging.debug(f"Stage-2 work request took {time.time() - t0:.2f}s")
-            if resp.status_code == 404 or not resp.json().get("work_batch"):
+            resp_json = resp.json()
+            b2_multiplier = float(resp_json.get("b2_multiplier", 1.0))
+            if resp.status_code == 404 or not resp_json.get("work_batch"):
                 # No stage-2 residues available — fall back to running full ECM curves
                 t0 = time.time()
                 full_resp = requests.get(f"{args.server}/api/work/cpu/full", params={
@@ -338,8 +343,8 @@ async def main():
                             print(f"Failed to submit full CPU curves: {e}", file=sys.stderr)
                 continue
             resp.raise_for_status()
-            
-            work_batch = resp.json()["work_batch"]
+
+            work_batch = resp_json["work_batch"]
             if not work_batch:
                 await asyncio.sleep(10)
                 continue
@@ -362,9 +367,10 @@ async def main():
                 residues = [j["resume_line"] for j in jobs]
                 expression = jobs[0].get("expression") or f"C{len(jobs[0]['composite'])}"
                 t_level_val = jobs[0].get("t_level", 0)
-                print(f"\nStage 2: {expression} (C{len(jobs[0]['composite'])}) t{t_level_val:.1f} — {len(residues)} curves B1={b1}", file=sys.stderr)
+                b2 = round(b1 * 100 * b2_multiplier)
+                print(f"\nStage 2: {expression} (C{len(jobs[0]['composite'])}) t{t_level_val:.1f} — {len(residues)} curves B1={b1} B2={b2} (k={b2_multiplier:.3f})", file=sys.stderr)
 
-                cpu_proc = CPUProc(ecm_path, args.threads, b1)
+                cpu_proc = CPUProc(ecm_path, args.threads, b1, b2)
                 await cpu_proc.run(residues)
                 duration = time.time() - (cpu_proc.start_time or time.time())
 
@@ -400,10 +406,10 @@ async def main():
                         "client_name": args.name,
                         "completions": [
                             {
-                                "composite": int(job["composite"]),
+                                "composite": job["composite"],
                                 "sigma": job["sigma"],
                                 "b2_start": b1,
-                                "b2_end": b1 * 100,
+                                "b2_end": b2,
                                 "duration": duration / len(completed_jobs),
                             }
                             for job in completed_jobs

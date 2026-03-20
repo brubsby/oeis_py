@@ -10,6 +10,26 @@ import requests
 interrupt_level = 0
 
 
+def fmt_seconds(s: float) -> str:
+    """Format a duration in seconds as 01d03h35m50s, dropping leading zero units.
+    Handles negative values with a leading '-'.
+    """
+    negative = s < 0
+    s = abs(int(s))
+    d, s = divmod(s, 86400)
+    h, s = divmod(s, 3600)
+    m, s = divmod(s, 60)
+    parts = []
+    started = False
+    for val, suffix in ((d, "d"), (h, "h"), (m, "m")):
+        if val or started:
+            parts.append(f"{val:02d}{suffix}")
+            started = True
+    parts.append(f"{s:02d}s")
+    result = "".join(parts)
+    return f"-{result}" if negative else result
+
+
 def setup_logging(verbose: int):
     loglevel = logging.WARNING
     if verbose > 0:

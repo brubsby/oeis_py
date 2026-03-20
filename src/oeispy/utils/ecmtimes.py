@@ -1,3 +1,4 @@
+import functools
 import importlib.util
 import math
 import sys
@@ -43,6 +44,35 @@ def get_ecm_time(digits, b1, curves, threads=1):
         times = ecm_times[i][j].split("s+")
         stime = float(times[0]) + float(times[1])
     return stime * curves / threads
+
+
+@functools.lru_cache(maxsize=2048)
+def get_ecm_stage2_time(digits, b1, b2, curves=1, threads=1):
+    """Estimated stage-2 time for `curves` curves at (b1, b2) on the reference machine.
+
+    Scales the table's stage-2 value (recorded at B2=B1*100) by (b2-b1)^0.68
+    so that different B2 choices produce accurate reference times.
+    """
+    default_b2 = b1 * 100
+    if digits > 500:
+        total = get_ecm_time(digits, b1, curves, threads)
+        scale = ((b2 - b1) / (default_b2 - b1)) ** 0.68
+        return total * 0.75 * scale  # ~75% of total ECM time is stage 2 at default B2
+    ecm_times = _get_digits_module(digits).ecm_times
+    i = 0
+    j = 0
+    for i in range(len(ecm_times)):
+        if ecm_times[i][1] == digits:
+            break
+    for j in range(2, len(ecm_times[0])):
+        if ecm_times[0][j] >= b1:
+            break
+    if i < len(ecm_times) and j < len(ecm_times[0]):
+        times = ecm_times[i][j].split("s+")
+        s2_default = float(times[1])
+        scale = ((b2 - b1) / (default_b2 - b1)) ** 0.68
+        return s2_default * scale * curves / threads
+    return 0.0
 
 
 def get_ecm_mem(digits, b1):
