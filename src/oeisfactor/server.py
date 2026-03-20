@@ -1,7 +1,7 @@
 import logging
 import gmpy2
 from flask import Flask, request, jsonify
-from oeisfactor.db import OEISFactorDB
+from oeisfactor.db import OEISFactorDB, WorkerPreferences, CompositeOrdering
 
 app = Flask(__name__)
 db = OEISFactorDB()
@@ -30,10 +30,15 @@ def get_gpu_work():
     if not client_name:
         return jsonify({"error": "client_name is required"}), 400
     
-    digit_limit = int(request.args.get("digit_limit", 300))
     curves = int(request.args.get("curves", 8192))
-    
-    work = db.request_stage1_GPU_work(client_name, digit_limit=digit_limit, curves=curves)
+    prefs = WorkerPreferences(
+        digit_limit=int(request.args.get("digit_limit", 300)),
+        pretest=float(request.args.get("pretest", 0.3)),
+        skip_outstanding_residues=request.args.get("skip_outstanding_residues", "true").lower() == "true",
+        ordering=CompositeOrdering(request.args.get("ordering", CompositeOrdering.T_LEVEL.value)),
+    )
+
+    work = db.request_stage1_GPU_work(client_name, curves=curves, prefs=prefs)
     if work:
         composite, b1, completion_time, expression, t_level_val = work
         return jsonify({
@@ -117,9 +122,13 @@ def get_full_cpu_work():
     if not client_name:
         return jsonify({"error": "client_name is required"}), 400
 
-    digit_limit = int(request.args.get("digit_limit", 300))
+    prefs = WorkerPreferences(
+        digit_limit=int(request.args.get("digit_limit", 300)),
+        pretest=float(request.args.get("pretest", 0.3)),
+        ordering=CompositeOrdering(request.args.get("ordering", CompositeOrdering.T_LEVEL.value)),
+    )
 
-    work = db.request_full_CPU_work(client_name, digit_limit=digit_limit)
+    work = db.request_full_CPU_work(client_name, prefs=prefs)
     if work:
         composite, b1, suggested_curves, expression, t_level_val = work
         return jsonify({"composite": str(composite), "b1": b1, "suggested_curves": suggested_curves, "expression": expression, "t_level": t_level_val})

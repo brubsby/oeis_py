@@ -6,6 +6,8 @@ import sqlite3
 import pickle
 import sys
 import time
+from dataclasses import dataclass, field
+from enum import Enum
 
 import requests
 from lxml import html
@@ -14,6 +16,19 @@ import gmpy2
 import t_level
 
 from oeispy.utils import expression, factor, ecmtimes
+
+
+class CompositeOrdering(Enum):
+    T_LEVEL = "t_level"  # lowest t_level first, ties broken by fewest digits
+    DIGITS  = "digits"   # fewest digits first, ties broken by lowest t_level
+
+
+@dataclass
+class WorkerPreferences:
+    digit_limit: int = 300
+    pretest: float = 0.3
+    skip_outstanding_residues: bool = False
+    ordering: CompositeOrdering = CompositeOrdering.T_LEVEL
 
 DB_NAME = "oeis_factor.db"
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "data", "db", DB_NAME)
@@ -304,58 +319,26 @@ class OEISFactorDB:
         # TODO free reservation
         self.connection.commit()
 
-    def request_stage1_GPU_work(self, client_name, digit_limit=300, curves=8192):
-        best_composite = None
-        best_score = float('inf')
-        best_b1 = None
-        
-        # Check the top theoretical easiest composites
-        for i, row in enumerate(self.iter_unfactored_composites(digit_limit, skip_with_outstanding_residues=True, validate=False)):
-            if i >= 50:
-                break
-                
+    def request_stage1_GPU_work(self, client_name, curves=8192, prefs: WorkerPreferences = None):
+        if prefs is None:
+            prefs = WorkerPreferences(skip_outstanding_residues=True)
+        # The SQL ordering already gives the optimal composite — just take the first valid row.
+        for row in self.iter_unfactored_composites(prefs, validate=False):
             t_level_val = float(row['t_level'] or 0)
-            digits = int(row['digits'])
-            
             b1 = self.get_optimal_gpu_b1(curves, t_level_val)
-            
-            # Estimate how much this B1 will increase the t_level
-            existing_curves, existing_b1 = t_level.get_t_level_curves(t_level_val)
-            new_t_level = t_level.get_t_level([
-                (existing_curves, existing_b1, None, 1),
-                (curves, b1, b1, 3)
-            ])
-            delta_t = new_t_level - t_level_val
-            
-            if delta_t <= 0:
-                continue
-                
-            # Time cost proxy: B1 * digits^2
-            # We want to minimize (cost / delta_t)
-            score = (b1 * (digits ** 2)) / delta_t
-            
-            if score < best_score:
-                best_score = score
-                best_composite = row['value']
-                best_b1 = b1
-                best_expression = row['expression']
-                best_t_level = t_level_val
-
-        if best_composite:
-            # TODO: self.make_reservation(best_composite, client_name, ...)
-            return best_composite, best_b1, 0, best_expression, best_t_level
+            # TODO: self.make_reservation(row['value'], client_name, ...)
+            return row['value'], b1, 0, row['expression'], t_level_val
 
         return None
 
-    def request_full_CPU_work(self, client_name, digit_limit=300, t_step=1):
+    def request_full_CPU_work(self, client_name, t_step=1, prefs: WorkerPreferences = None):
         """Select best composite and return curves+B1 needed to reach the next t-level milestone.
 
-        The SQL query orders by t_level ASC, digits ASC, which already gives the optimal
-        composite (lowest t_level wins; ties broken by fewest digits — equivalent to the
-        scoring formula (b1 * digits^2) / delta_t since b1 and delta_t are both determined
-        solely by t_level+t_step).
+        The SQL ordering already gives the optimal composite — just take the first valid row.
         """
-        for row in self.iter_unfactored_composites(digit_limit, validate=False):
+        if prefs is None:
+            prefs = WorkerPreferences()
+        for row in self.iter_unfactored_composites(prefs, validate=False):
             t_level_val = float(row['t_level'] or 0)
             target_t = math.floor(t_level_val) + t_step
 
@@ -631,38 +614,46 @@ class OEISFactorDB:
             else:
                 return self.get_easiest_composite(digit_limit=digit_limit, pretest=pretest, delta_t=delta_t, threads=threads)
 
-    def iter_unfactored_composites(self, digit_limit=500, pretest=0.3, skip_with_outstanding_residues=False, validate=True):
-        """Yields valid, unfactored composites from easiest to hardest (by t_level).
+    def iter_unfactored_composites(self, prefs: WorkerPreferences = None, validate=True):
+        """Yields unfactored composites ordered according to prefs.
 
         Set validate=False to skip FactorDB HTTP lookups (composites that got
         factored externally will be caught at factor-submission time instead).
         """
+        if prefs is None:
+            prefs = WorkerPreferences()
+
+        order_clause = (
+            "ORDER BY t_level ASC, digits ASC"
+            if prefs.ordering == CompositeOrdering.T_LEVEL
+            else "ORDER BY digits ASC, t_level ASC"
+        )
+
         cur = self.cursor()
 
-        if skip_with_outstanding_residues:
-            # We filter out any composite that has a row in stage_1_curve without a matching row in stage_2_curve
-            query = """
-                SELECT c.id, c.value, c.t_level, c.expression, c.digits 
+        if prefs.skip_outstanding_residues:
+            query = f"""
+                SELECT c.id, c.value, c.t_level, c.expression, c.digits
                 FROM composite c
                 WHERE c.digits < ? AND c.t_level < (c.digits * ?)
                   AND c.id NOT IN (
-                      SELECT s1.composite_id 
+                      SELECT s1.composite_id
                       FROM stage_1_curve s1
                       LEFT JOIN stage_2_curve s2 ON s1.sigma = s2.sigma AND s1.composite_id = s2.composite_id
                       WHERE s2.sigma IS NULL
                   )
-                ORDER BY c.t_level ASC, c.digits ASC
+                {order_clause}
             """
         else:
-            query = """
-                SELECT id, value, t_level, expression, digits 
-                FROM composite 
-                WHERE digits < ? AND t_level < (digits * ?) 
-                ORDER BY t_level ASC, digits ASC
+            query = f"""
+                SELECT id, value, t_level, expression, digits
+                FROM composite
+                WHERE digits < ? AND t_level < (digits * ?)
+                {order_clause}
             """
-            
-        cur.execute(query, (digit_limit, pretest))
-        
+
+        cur.execute(query, (prefs.digit_limit, prefs.pretest))
+
         for row in cur.fetchall():
             if not validate or self.validate_stored_composite_unfactored(row['value']):
                 yield row

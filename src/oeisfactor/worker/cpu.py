@@ -4,13 +4,12 @@ import logging
 import os
 import re
 import shutil
-import signal
 import sys
 import time
 import requests
+from collections import Counter
 from oeispy.utils import ecmtimes
-
-interrupt_level = 0
+from oeisfactor.worker import common
 
 def locate_ecm_install():
     install_location = shutil.which("ecm")
@@ -83,10 +82,13 @@ class CPUProc:
         ]
         self.tasks.extend(reader_tasks)
 
+        total_curves = len(residue_lines)
+        print(f"Completed 0/{total_curves} CPU Stage 2 curves...                 ", end="\r", file=sys.stderr)
+
         current_sigma = {}  # proc_index -> sigma currently being processed
         finished_readers = 0
         while finished_readers < len(self.procs):
-            if interrupt_level >= 2:
+            if common.interrupt_level >= 2:
                 await self.kill()
                 break
 
@@ -99,7 +101,7 @@ class CPUProc:
                 self.completed_lines += 1
                 if proc_index in current_sigma:
                     self.completed_sigmas.add(current_sigma[proc_index])
-                print(f"Completed {self.completed_lines}/{len(residue_lines)} CPU curves...                 ", end="\r", file=sys.stderr)
+                print(f"Completed {self.completed_lines}/{total_curves} CPU Stage 2 curves...                 ", end="\r", file=sys.stderr)
             elif line.startswith("Using"):
                 # Parse sigma from "Using B1=..., sigma=0:16975636616726985561"
                 m = re.search(r"sigma=\d+:(\d+)", line)
@@ -175,7 +177,7 @@ class CPUProcFull:
         current_b2 = {}
         finished_readers = 0
         while finished_readers < self.threads:
-            if interrupt_level >= 2:
+            if common.interrupt_level >= 2:
                 await self.kill()
                 break
 
@@ -224,44 +226,19 @@ class CPUProcFull:
 
 
 async def main():
-    global interrupt_level
-    
     parser = argparse.ArgumentParser(description="Distributed CPU-ECM Worker")
-    parser.add_argument("--server", type=str, default="http://localhost:5000", help="URL of the OEISFactor server")
-    parser.add_argument("--name", type=str, required=True, help="Unique name for this worker")
+    common.add_common_args(parser)
     parser.add_argument("-t", "--threads", type=int, default=os.cpu_count() or 1, help="Number of CPU threads to use")
     parser.add_argument("--hours", type=float, default=1.0, help="Target hours of work to fetch per batch")
-    parser.add_argument("-v", "--verbose", action="count", default=0, help="verbosity (-v, -vv, etc)")
     args = parser.parse_args()
 
-    loglevel = logging.WARNING
-    if args.verbose > 0:
-        loglevel = logging.INFO
-    if args.verbose > 1:
-        loglevel = logging.DEBUG
-    logging.basicConfig(level=loglevel, format="%(message)s")
-
-    def handle_signal(signame):
-        global interrupt_level
-        interrupt_level += 1
-        print(f"\nReceived {signame}. Interrupt level: {interrupt_level}", file=sys.stderr)
-        if interrupt_level >= 3:
-            sys.exit(1)
+    common.setup_logging(args.verbose)
 
     loop = asyncio.get_running_loop()
-    for signame in ('SIGINT', 'SIGTERM'):
-        loop.add_signal_handler(getattr(signal, signame), lambda signame=signame: handle_signal(signame))
+    common.setup_signal_handlers(loop)
 
     ecm_path = locate_ecm_install()
-    
-    # Register worker
-    try:
-        resp = requests.post(f"{args.server}/api/worker/register", json={"name": args.name, "type": "CPU"})
-        resp.raise_for_status()
-        print(f"Registered worker '{args.name}' with server {args.server} using {args.threads} threads")
-    except Exception as e:
-        print(f"Failed to register with server: {e}", file=sys.stderr)
-        sys.exit(1)
+    common.register_worker(args.server, args.name, "CPU", f"using {args.threads} threads")
 
     # speed_factor: ratio of reference-machine time to our observed time (EMA).
     # Calibrated from actual runs; stable across B1/digit changes because it's
@@ -272,7 +249,7 @@ async def main():
     last_digits = None
     full_speed_factor = None  # separate calibration for full ECM (stage 1 + stage 2)
 
-    while interrupt_level == 0:
+    while common.interrupt_level == 0:
         try:
             # Compute how many curves to request based on target hours.
             # Use the reference timing table scaled by our observed speed factor
@@ -336,34 +313,14 @@ async def main():
 
                 # Report any factors found
                 if cpu_proc.found_factors:
-                    composite_int = int(composite_str)
                     for match in cpu_proc.found_factors:
-                        factor_str = str(match['factor'])
-                        if len(factor_str) >= 60:
-                            os.makedirs("data/logs/hits", exist_ok=True)
-                            log_path = os.path.join("data/logs/hits", f"hit_cpu_full_{int(time.time())}_{factor_str[:10]}.log")
-                            with open(log_path, "w") as lf:
-                                lf.write(f"Timestamp: {time.time()}\n")
-                                lf.write(f"Composite: {composite_str}\n")
-                                lf.write(f"Factor: {factor_str}\n")
-                                lf.write(f"Length: {len(factor_str)} digits\n")
-                                lf.write(f"B1: {b1}\n")
-                                lf.write(f"Context: {match['using_line']}\n")
-                            print(f"\n\n********** BIG CPU HIT: C{len(factor_str)} logged to {log_path} **********\n\n", file=sys.stderr)
-                    try:
-                        f_resp = requests.post(f"{args.server}/api/submit/factor", json={
-                            "client_name": args.name,
-                            "composite": composite_int,
-                            "factors": [f['factor'] for f in cpu_proc.found_factors]
-                        })
-                        f_resp.raise_for_status()
-                        print("Factor reported to server!", file=sys.stderr)
-                    except Exception as e:
-                        print(f"Failed to submit factor: {e}", file=sys.stderr)
+                        common.log_big_hit(str(match['factor']), composite_str, b1,
+                                           tag="cpu_full", context=match['using_line'])
+                    common.submit_factors(args.server, args.name, int(composite_str),
+                                          [f['factor'] for f in cpu_proc.found_factors])
 
                 # Submit t-level update
-                if cpu_proc.completed_count > 0 and interrupt_level < 2:
-                    from collections import Counter
+                if cpu_proc.completed_count > 0 and common.interrupt_level < 2:
                     b2_counts = Counter(b2 for _, b2 in cpu_proc.completed_curves if b2 is not None)
                     curve_groups = [{"count": c, "b1": b1, "b2": b2, "ecm_param": 1} for b2, c in b2_counts.items()]
                     if curve_groups:
@@ -399,7 +356,7 @@ async def main():
                 b1_groups[b1].append(work)
                 
             for b1, jobs in b1_groups.items():
-                if interrupt_level > 0:
+                if common.interrupt_level > 0:
                     break
 
                 residues = [j["resume_line"] for j in jobs]
@@ -426,40 +383,16 @@ async def main():
                 # Check for found factors
                 if cpu_proc.found_factors:
                     print(f"Found factors during Stage 2: {[f['factor'] for f in cpu_proc.found_factors]}", file=sys.stderr)
-                    # We only know the composite of the first job because we batched, 
-                    # but if we found a factor it means they probably all shared a composite.
-                    composite = int(jobs[0]["composite"]) 
-                    
-                    # Log big hits (> 60 digits)
+                    composite = int(jobs[0]["composite"])
                     for match in cpu_proc.found_factors:
-                        factor_str = str(match['factor'])
-                        using_line = match['using_line']
-                        if len(factor_str) >= 60:
-                            os.makedirs("data/logs/hits", exist_ok=True)
-                            log_path = os.path.join("data/logs/hits", f"hit_cpu_{int(time.time())}_{factor_str[:10]}.log")
-                            with open(log_path, "w") as lf:
-                                lf.write(f"Timestamp: {time.time()}\n")
-                                lf.write(f"Composite: {composite}\n")
-                                lf.write(f"Factor: {factor_str}\n")
-                                lf.write(f"Length: {len(factor_str)} digits\n")
-                                lf.write(f"B1: {b1}\n")
-                                lf.write(f"Context: {using_line}\n")
-                            print(f"\n\n********** BIG CPU HIT: C{len(factor_str)} logged to {log_path} **********\n\n", file=sys.stderr)
-                    
-                    try:
-                        f_resp = requests.post(f"{args.server}/api/submit/factor", json={
-                            "client_name": args.name,
-                            "composite": composite,
-                            "factors": [f['factor'] for f in cpu_proc.found_factors]
-                        })
-                        f_resp.raise_for_status()
-                        print("Factors successfully reported to server!", file=sys.stderr)
-                    except Exception as e:
-                        print(f"Failed to submit factors: {e}", file=sys.stderr)
+                        common.log_big_hit(str(match['factor']), composite, b1,
+                                           tag="cpu", context=match['using_line'])
+                    common.submit_factors(args.server, args.name, composite,
+                                          [f['factor'] for f in cpu_proc.found_factors])
                         
                 # Submit all completions in one batch call instead of one POST per job
                 # If killed mid-batch, only submit curves whose sigma actually completed.
-                completed_jobs = [j for j in jobs if j["sigma"] in cpu_proc.completed_sigmas] if interrupt_level >= 2 else jobs
+                completed_jobs = [j for j in jobs if j["sigma"] in cpu_proc.completed_sigmas]
                 if not completed_jobs:
                     break
                 try:
