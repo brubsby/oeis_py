@@ -1,3 +1,4 @@
+import functools
 import logging
 import math
 import os
@@ -34,6 +35,43 @@ DB_NAME = "oeis_factor.db"
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "data", "db", DB_NAME)
 
 logger = logging.getLogger("oeis_factor_db")
+
+
+@functools.lru_cache(maxsize=256)
+def _compute_optimal_gpu_b1(gpu_curves: int, existing_t_level: float) -> int:
+    """Hill-climb to find B1 that maximises t-level gain per unit B1 for GPU ECM.
+
+    Results are cached by (gpu_curves, existing_t_level) so repeated requests
+    for the same composite are instant after the first call.
+    """
+    b1 = t_level.get_regression_b1_for_t(existing_t_level + 1)
+    existing_curves, existing_b1 = t_level.get_t_level_curves(existing_t_level)
+    existing_curve_tup = (existing_curves, existing_b1, None, 1)
+    max_val = 0
+    max_b1 = b1
+    direction = -1
+    magnitude = 0.01
+    misses = 0
+    t_level_diff_per_b1 = (t_level.get_t_level([
+        existing_curve_tup,
+        (gpu_curves, b1, b1, 3)]) - existing_t_level) / b1
+    for i in range(100):
+        if t_level_diff_per_b1 > max_val:
+            max_val = t_level_diff_per_b1
+            max_b1 = b1
+            misses = 0
+        b1 = int(b1 * (1 + direction * magnitude))
+        t_level_diff_per_b1 = (t_level.get_t_level([
+            existing_curve_tup,
+            (gpu_curves, b1, b1, 3)]) - existing_t_level) / b1
+        if t_level_diff_per_b1 < max_val:
+            if i == 0:
+                direction *= -1
+            else:
+                misses += 1
+                if misses > 5:
+                    break
+    return t_level.b1_level_round(max_b1)
 
 
 class OEISFactorDB:
@@ -442,36 +480,7 @@ class OEISFactorDB:
     # we want to find the B1 such that t-level grows fastest per B1
     # given the number of curves we have
     def get_optimal_gpu_b1(self, gpu_curves, existing_t_level):
-        # start with a b1 guess
-        b1 = t_level.get_regression_b1_for_t(existing_t_level + 1)
-        existing_curves, existing_b1 = t_level.get_t_level_curves(existing_t_level)
-        existing_curve_tup = (existing_curves, existing_b1, None, 1)
-        max_val = 0
-        max_b1 = b1
-        direction = -1
-        magnitude = 0.01
-        misses = 0
-        t_level_diff_per_b1 = (t_level.get_t_level([
-            existing_curve_tup,
-            (gpu_curves, b1, b1, 3)]) - existing_t_level) / b1
-        for i in range(100):
-            if t_level_diff_per_b1 > max_val:
-                max_val = t_level_diff_per_b1
-                max_b1 = b1
-                misses = 0
-            b1 = int(b1 * (1 + direction * magnitude))
-            t_level_diff_per_b1 = (t_level.get_t_level([
-                existing_curve_tup,
-                (gpu_curves, b1, b1, 3)]) - existing_t_level) / b1
-            if t_level_diff_per_b1 < max_val:
-                if i == 0:
-                    direction *= -1
-                else:
-                    misses += 1
-                    if misses > 5:
-                        break
-        # return int(max_b1)
-        return t_level.b1_level_round(max_b1)
+        return _compute_optimal_gpu_b1(gpu_curves, round(existing_t_level, 1))
 
 
     def add_sequence(self, sequence_id, more=None, factor_requirement=None, first_unknown_n=None, first_unknown_k=None):

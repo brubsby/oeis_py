@@ -1,13 +1,40 @@
 import logging
+import threading
 import gmpy2
 from flask import Flask, request, jsonify
-from oeisfactor.db import OEISFactorDB, WorkerPreferences, CompositeOrdering
+from oeisfactor.db import OEISFactorDB, WorkerPreferences, CompositeOrdering, _compute_optimal_gpu_b1
+
+# Number of upcoming GPU composites to pre-warm the B1 cache for
+GPU_WARMUP_LOOKAHEAD = 5
 
 app = Flask(__name__)
 db = OEISFactorDB()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+_warmup_lock = threading.Lock()
+
+def _background_warm_gpu_cache(curves: int, n: int = GPU_WARMUP_LOOKAHEAD):
+    """Precompute optimal B1 for the next N GPU composites in the background."""
+    if not _warmup_lock.acquire(blocking=False):
+        return  # another warmup is already running
+    try:
+        prefs = WorkerPreferences(skip_outstanding_residues=True)
+        count = 0
+        for row in db.iter_unfactored_composites(prefs, validate=False):
+            if count >= n:
+                break
+            _compute_optimal_gpu_b1(curves, round(float(row['t_level'] or 0), 1))
+            count += 1
+        logger.debug(f"GPU B1 cache warmed for {count} composites (curves={curves})")
+    except Exception as e:
+        logger.warning(f"GPU cache warmup error: {e}")
+    finally:
+        _warmup_lock.release()
+
+# Warm cache on startup for the default GPU curve count
+threading.Thread(target=_background_warm_gpu_cache, args=(8192,), daemon=True).start()
 
 @app.route('/api/worker/register', methods=['POST'])
 def register_worker():
@@ -41,6 +68,7 @@ def get_gpu_work():
     work = db.request_stage1_GPU_work(client_name, curves=curves, prefs=prefs)
     if work:
         composite, b1, completion_time, expression, t_level_val = work
+        threading.Thread(target=_background_warm_gpu_cache, args=(curves,), daemon=True).start()
         return jsonify({
             "composite": str(composite),
             "b1": b1,

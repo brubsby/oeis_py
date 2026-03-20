@@ -86,7 +86,7 @@ class GPUProc:
 
         status_task.cancel()
         await asyncio.gather(status_task, return_exceptions=True)
-        print("", file=sys.stderr)  # clear the status line
+        print(f"GPU ECM: 100%                              ", file=sys.stderr)
         await self.gpu_proc.wait()
         return self.gpu_proc.returncode
 
