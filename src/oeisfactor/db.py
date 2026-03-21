@@ -487,7 +487,7 @@ class OEISFactorDB:
             JOIN composite c ON s1.composite_id = c.id
             LEFT JOIN stage_2_curve s2 ON s1.sigma = s2.sigma AND s1.composite_id = s2.composite_id
             WHERE s2.sigma IS NULL
-            ORDER BY c.digits ASC, s1.timestamp ASC
+            ORDER BY c.t_level ASC, c.digits ASC, s1.timestamp ASC
             LIMIT ?;
         """, (limit,))
 
@@ -707,12 +707,12 @@ class OEISFactorDB:
             cursor.execute("SELECT id, t_level FROM composite WHERE value = ?;", (pickle.dumps(new_composite),))
             new_composite_id, new_work = cursor.fetchone() or (None, None)
             # get the metadata for the old composite
-            cursor.execute("SELECT id, t_level FROM composite WHERE value = ?;", (pickle.dumps(old_composite),))
+            cursor.execute("SELECT id, t_level, expression FROM composite WHERE value = ?;", (pickle.dumps(old_composite),))
             rows = cursor.fetchall()
             # there should be something here, otherwise just return the remaining composites
             if len(rows) == 0:
                 return remaining_composites
-            old_composite_id, old_work = rows[0]
+            old_composite_id, old_work, old_expression = rows[0]
             assert old_composite_id is not None
             # conservatively take the maximum of the work for both composites
             work = max(new_work or 0, old_work)
@@ -722,7 +722,7 @@ class OEISFactorDB:
             if new_composite_id:  # there was an existing composite of this value in the db
                 logger.info(f"following C{new_digits} already existed in db: {new_composite}")
             # both cases work for this method
-            self.add_composite(new_composite, sequence_ids=sequences, work=work)
+            self.add_composite(new_composite, expression=old_expression, sequence_ids=sequences, work=work)
             logger.info(f"moving sequence pointers to new composite and deleting old record")
             self.delete_composite(old_composite)
             return remaining_composites
