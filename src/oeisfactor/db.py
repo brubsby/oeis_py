@@ -80,6 +80,8 @@ class OEISFactorDB:
         os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
         sqlite3.register_converter("PICKLE", pickle.loads)
         self.connection = sqlite3.connect(DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES, check_same_thread=False)
+        self.connection.execute("PRAGMA journal_mode=WAL")
+        self.connection.execute("PRAGMA synchronous=NORMAL")
         self.create_db()
         self._migrate()
 
@@ -292,9 +294,10 @@ class OEISFactorDB:
         then stack only the uncounted new curves on top. After updating, we mark
         those curves counted so they are never added again.
         """
-        cursor.execute("SELECT t_level FROM composite WHERE id = ?", (composite_id,))
+        cursor.execute("SELECT t_level, expression FROM composite WHERE id = ?", (composite_id,))
         row = cursor.fetchone()
         current_t = (row['t_level'] or 0) if row else 0
+        expr = row['expression'] if row else f"id={composite_id}"
 
         # Only grab curves not yet counted — avoids double-counting with current_t
         cursor.execute("""
@@ -307,6 +310,7 @@ class OEISFactorDB:
 
         new_curve_groups = cursor.fetchall()
         if not new_curve_groups:
+            logger.warning(f"_update_composite_t_level: no uncounted stage_2 rows found for {expr} (composite_id={composite_id}), skipping")
             return
 
         curve_tuples = []
@@ -318,23 +322,24 @@ class OEISFactorDB:
             curve_tuples.append((row['n_curves'], row['b1'], row['b2_end'], row['ecm_param'] or 1))
 
         new_t = t_level.get_t_level(curve_tuples)
+        logger.info(f"t_level update: {expr} t{current_t:.4f} -> t{new_t:.4f} ({sum(r['n_curves'] for r in new_curve_groups)} new curves)")
 
         cursor.execute(
             "UPDATE composite SET t_level = MAX(?, IFNULL(t_level, 0)) WHERE id = ?",
             (new_t, composite_id)
         )
-        # Delete stage_1 rows whose stage_2 is now complete, then the stage_2 rows.
-        # stage_1 must be deleted first while stage_2 still exists to identify the sigmas.
+        # Mark the newly counted stage_1 curves
         cursor.execute("""
-            DELETE FROM stage_1_curve
-            WHERE composite_id = ?
+            UPDATE stage_1_curve SET counted_in_t_level = 1
+            WHERE composite_id = ? AND counted_in_t_level = 0
               AND sigma IN (
                   SELECT sigma FROM stage_2_curve
                   WHERE composite_id = ? AND counted_in_t_level = 0
               )
         """, (composite_id, composite_id))
+        # Mark the newly counted stage_2 curves
         cursor.execute("""
-            DELETE FROM stage_2_curve
+            UPDATE stage_2_curve SET counted_in_t_level = 1
             WHERE composite_id = ? AND counted_in_t_level = 0
         """, (composite_id,))
 
@@ -566,26 +571,40 @@ class OEISFactorDB:
             WHERE s2.sigma IS NULL
             GROUP BY c.digits, s1.b1
         """)
-        from oeispy.utils.ecmtimes import get_ecm_stage2_time
+        from oeispy.utils.ecmtimes import get_ecm_stage2_time, gmp_ecm_default_b2
         pv = 0.0
         for row in cur.fetchall():
             b1 = int(row['b1'])
-            pv += row['n'] * get_ecm_stage2_time(int(row['digits']), b1, b1 * 100)
+            pv += row['n'] * get_ecm_stage2_time(int(row['digits']), b1, gmp_ecm_default_b2(b1))
         return pv
 
-    def get_throughput_t(self, window_seconds=21600):
-        """T = reference CPU-seconds completed per real second over a rolling window."""
+    def get_throughput_t(self, window_seconds=21600, min_elapsed=3600):
+        """T = reference CPU-seconds completed per real second over a rolling window.
+
+        Uses (now - oldest_event_in_window) as the denominator, clamped to
+        [min_elapsed, window_seconds]. This lets T converge quickly once data
+        exists (rather than being diluted by a full 6-hour window from the
+        start), while the min_elapsed floor prevents T from exploding when a
+        large batch is submitted all at once with near-identical timestamps.
+        """
         cur = self.cursor()
-        since = int(time.time() - window_seconds)
+        now = time.time()
+        since = int(now - window_seconds)
         cur.execute("""
-            SELECT SUM(ecmtime_reference) as total
+            SELECT SUM(ecmtime_reference) as total,
+                   MIN(strftime('%s', timestamp)) as oldest_ts
             FROM stage_2_curve
             WHERE timestamp > datetime(?, 'unixepoch')
               AND ecmtime_reference IS NOT NULL
         """, (since,))
         row = cur.fetchone()
         total = float(row['total'] or 0)
-        return total / window_seconds if window_seconds > 0 else 0.0
+        if total == 0:
+            return 0.0
+        oldest_ts = row['oldest_ts']
+        elapsed = now - float(oldest_ts) if oldest_ts else window_seconds
+        denominator = max(min(elapsed, window_seconds), min_elapsed)
+        return total / denominator
 
     def add_sequence(self, sequence_id, more=None, factor_requirement=None, first_unknown_n=None, first_unknown_k=None):
         cursor = self.connection.cursor()

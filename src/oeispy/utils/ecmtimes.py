@@ -46,14 +46,23 @@ def get_ecm_time(digits, b1, curves, threads=1):
     return stime * curves / threads
 
 
+def gmp_ecm_default_b2(b1: int) -> int:
+    """GMP-ECM's default B2 for ECM: (B1 * 11/6)^1.43.
+
+    This is the B2 that balances stage-1 and stage-2 cost on a single machine,
+    and is what the wraithx ecmtimes tables are recorded at.
+    """
+    return round((b1 * 11 / 6) ** 1.43)
+
+
 @functools.lru_cache(maxsize=2048)
 def get_ecm_stage2_time(digits, b1, b2, curves=1, threads=1):
     """Estimated stage-2 time for `curves` curves at (b1, b2) on the reference machine.
 
-    Scales the table's stage-2 value (recorded at B2=B1*100) by (b2-b1)^0.68
-    so that different B2 choices produce accurate reference times.
+    Scales the table's stage-2 value (recorded at GMP-ECM's default B2) by
+    (b2-b1)^0.68 so that different B2 choices produce accurate reference times.
     """
-    default_b2 = b1 * 100
+    default_b2 = gmp_ecm_default_b2(b1)
     if digits > 500:
         total = get_ecm_time(digits, b1, curves, threads)
         scale = ((b2 - b1) / (default_b2 - b1)) ** 0.68

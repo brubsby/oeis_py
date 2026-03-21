@@ -9,6 +9,7 @@ import time
 import requests
 from collections import Counter
 from oeispy.utils import ecmtimes
+from oeispy.utils.ecmtimes import gmp_ecm_default_b2
 from oeisfactor.worker import common
 
 def locate_ecm_install():
@@ -367,7 +368,7 @@ async def main():
                 residues = [j["resume_line"] for j in jobs]
                 expression = jobs[0].get("expression") or f"C{len(jobs[0]['composite'])}"
                 t_level_val = jobs[0].get("t_level", 0)
-                b2 = round(b1 * 100 * b2_multiplier)
+                b2 = round(gmp_ecm_default_b2(b1) * b2_multiplier)
                 print(f"\nStage 2: {expression} (C{len(jobs[0]['composite'])}) t{t_level_val:.1f} — {len(residues)} curves B1={b1} B2={b2} (k={b2_multiplier:.3f})", file=sys.stderr)
 
                 cpu_proc = CPUProc(ecm_path, args.threads, b1, b2)

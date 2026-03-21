@@ -13,10 +13,10 @@ GPU_WARMUP_LOOKAHEAD = 5
 # --- PID controller configuration ---
 TARGET_BUFFER_SECONDS = 86400  # target queue depth: 1 day of current-fleet capacity
 THROUGHPUT_WINDOW_SECONDS = 21600  # 6h rolling window for throughput T measurement
-K_MIN = 0.1                 # minimum B2 multiplier (B2 = B1 * 100 * k)
-K_MAX = 10.0                # maximum B2 multiplier
-K_MIN_LOG = math.log10(K_MIN)   # -1.0
-K_MAX_LOG = math.log10(K_MAX)   # +1.0
+K_MIN = 0.001               # minimum B2 multiplier (B2 = gmp_default * k)
+K_MAX = 1.0                 # maximum B2 multiplier — cap at GMP-ECM optimal
+K_MIN_LOG = math.log10(K_MIN)   # -3.0
+K_MAX_LOG = math.log10(K_MAX)   # 0.0
 PID_KP = 1e-8               # proportional gain  (tune empirically)
 PID_KI = 1e-11              # integral gain
 PID_KD = 1e-6               # derivative gain (on PV, not error)
@@ -89,6 +89,10 @@ def _run_pid_tick():
     _current_b2_multiplier = k
     db.update_pid_state(u_clamped, new_integral, pv, now)
     logger.info(f"PID: PV={fmt_seconds(pv)} SP={fmt_seconds(sp)} err={fmt_seconds(error)} u={u_clamped:.3f} k={k:.3f}")
+
+
+# Tick PID on startup so k is logged immediately
+threading.Thread(target=_run_pid_tick, daemon=True).start()
 
 
 @app.route('/api/worker/register', methods=['POST'])
@@ -180,6 +184,10 @@ def submit_cpu_work_batch():
     try:
         new_t_levels = db.submit_stage_2_curves_batch(completions, client_name)
         threading.Thread(target=_run_pid_tick, daemon=True).start()
+        t_summary = ", ".join(
+            f"{v['expression']} t{v['t_level']:.2f}" for v in new_t_levels.values()
+        ) if new_t_levels else "no update"
+        logger.info(f"CPU batch accepted: {len(completions)} curves from {client_name} — {t_summary}")
         return jsonify({"status": "success", "count": len(completions), "new_t_levels": new_t_levels}), 200
     except Exception as e:
         logger.error(f"Error submitting CPU batch: {e}")
